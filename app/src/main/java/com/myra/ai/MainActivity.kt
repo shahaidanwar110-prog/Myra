@@ -262,6 +262,19 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // Check if command can be parsed on-device without calling AI
+        val localAction = com.myra.ai.ai.CommandParser.parseCommand(trimmedPrompt)
+        if (localAction != null) {
+            currentTaskJob = lifecycleScope.launch {
+                isTaskRunningState.value = true
+                taskNotificationManager.showTaskRunningNotification("Executing command: $trimmedPrompt")
+                executeSingleActionWithConfirmation(localAction, chatMessages)
+                isTaskRunningState.value = false
+                taskNotificationManager.clearNotification()
+            }
+            return
+        }
+
         currentTaskJob = lifecycleScope.launch {
             isTaskRunningState.value = true
             taskNotificationManager.showTaskRunningNotification("Processing command: $prompt")

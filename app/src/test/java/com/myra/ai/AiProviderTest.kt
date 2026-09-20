@@ -41,9 +41,8 @@ class AiProviderTest {
     }
 
     @Test
-    fun testHttpPostRetryLogicOn503And429() = runBlocking {
+    fun testHttpPostRetryLogicOn503Only() = runBlocking {
         var callCount = 0
-        // Test function simulating single HTTP post
         fun mockExecuteSingleHttpPost(): Pair<Int, Result<String>> {
             callCount++
             return if (callCount < 3) {
@@ -62,7 +61,7 @@ class AiProviderTest {
                 finalResult = result
                 break
             }
-            if ((statusCode == 503 || statusCode == 429) && attempts < maxRetries) {
+            if (statusCode == 503 && attempts < maxRetries) {
                 attempts++
             } else {
                 finalResult = result
@@ -73,5 +72,35 @@ class AiProviderTest {
         assertEquals(3, callCount)
         assertTrue(finalResult?.isSuccess == true)
         assertEquals("Success Response", finalResult?.getOrNull())
+    }
+
+    @Test
+    fun testNoRetryOn429RateLimit() = runBlocking {
+        var callCount = 0
+        fun mockExecuteSingleHttpPost(): Pair<Int, Result<String>> {
+            callCount++
+            return Pair(429, Result.failure(Exception("HTTP 429: Daily free quota is finished. Please switch to another configured provider in Settings.")))
+        }
+
+        var attempts = 0
+        val maxRetries = 3
+        var finalResult: Result<String>? = null
+        while (true) {
+            val (statusCode, result) = mockExecuteSingleHttpPost()
+            if (result.isSuccess) {
+                finalResult = result
+                break
+            }
+            if (statusCode == 503 && attempts < maxRetries) {
+                attempts++
+            } else {
+                finalResult = result
+                break
+            }
+        }
+
+        assertEquals(1, callCount)
+        assertTrue(finalResult?.isFailure == true)
+        assertTrue(finalResult?.exceptionOrNull()?.message?.contains("Daily free quota is finished") == true)
     }
 }
