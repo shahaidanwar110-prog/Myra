@@ -5,11 +5,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.myra.ai.accessibility.MyraAccessibilityService
 import com.myra.ai.accessibility.PhoneControlManager
@@ -27,13 +38,7 @@ import com.myra.ai.notification.TaskNotificationManager
 import com.myra.ai.notification.TaskStopReceiver
 import com.myra.ai.ai.ActionType
 import com.myra.ai.ai.SystemAction
-import com.myra.ai.ui.screens.ActionConfirmation
-import com.myra.ai.ui.screens.ChatMessage
-import com.myra.ai.ui.screens.CodeModeScreen
-import com.myra.ai.ui.screens.CodeSnippet
-import com.myra.ai.ui.screens.HomeScreen
-import com.myra.ai.ui.screens.PermissionsScreen
-import com.myra.ai.ui.screens.SettingsScreen
+import com.myra.ai.ui.screens.*
 import com.myra.ai.ui.theme.MyraTheme
 import com.myra.ai.voice.VoiceController
 import kotlinx.coroutines.Job
@@ -86,12 +91,17 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MyraTheme {
+            var isDarkTheme by remember { mutableStateOf(secureStorage.isDarkTheme()) }
+
+            MyraTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    var isSplashScreenActive by remember { mutableStateOf(true) }
+                    var isOnboardingCompleted by remember { mutableStateOf(secureStorage.isOnboardingCompleted()) }
                     var currentScreen by remember { mutableStateOf("home") }
+
                     val isListening by voiceController.isListening.collectAsState()
                     val isSpeaking by voiceController.isSpeaking.collectAsState()
                     val isTaskRunning by remember { isTaskRunningState }
@@ -102,6 +112,12 @@ class MainActivity : ComponentActivity() {
                     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
                     val codeSnippets = remember { mutableStateListOf<CodeSnippet>() }
 
+                    // Splash screen delay transition
+                    LaunchedEffect(Unit) {
+                        delay(1200L)
+                        isSplashScreenActive = false
+                    }
+
                     // Speech recognition result handler
                     LaunchedEffect(Unit) {
                         voiceController.onSpeechResultListener = { spokenText ->
@@ -110,119 +126,177 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    when (currentScreen) {
-                        "settings" -> {
-                            SettingsScreen(
-                                secureStorage = secureStorage,
-                                onBack = { currentScreen = "home" },
-                                onOpenPermissions = { currentScreen = "permissions" },
-                                availableVoices = voiceController.getAvailableVoices(),
-                                onPreviewVoice = { voiceName, sampleText, pitch, rate ->
-                                    voiceController.previewVoice(voiceName, sampleText, pitch, rate)
-                                }
-                            )
-                        }
-                        "permissions" -> {
-                            PermissionsScreen(
-                                onBack = { currentScreen = "settings" }
-                            )
-                        }
-                        "code_mode" -> {
-                            CodeModeScreen(
-                                onBack = { currentScreen = "home" },
-                                codeSnippets = codeSnippets,
-                                onGenerateWebsite = { prompt ->
-                                    lifecycleScope.launch {
-                                        val res = coderAgent.generateWebsite(prompt)
-                                        res.onSuccess { file ->
-                                            codeSnippets.add(
-                                                CodeSnippet(
-                                                    title = "Generated Website",
-                                                    codeText = file.readText(),
-                                                    language = "html",
-                                                    localFilePath = file.absolutePath
+                    if (isSplashScreenActive) {
+                        SplashScreenContent()
+                    } else if (!isOnboardingCompleted) {
+                        OnboardingScreen(
+                            secureStorage = secureStorage,
+                            onOnboardingComplete = {
+                                isOnboardingCompleted = true
+                            }
+                        )
+                    } else {
+                        when (currentScreen) {
+                            "settings" -> {
+                                SettingsScreen(
+                                    secureStorage = secureStorage,
+                                    onBack = { currentScreen = "home" },
+                                    onOpenPermissions = { currentScreen = "permissions" },
+                                    availableVoices = voiceController.getAvailableVoices(),
+                                    onPreviewVoice = { voiceName, sampleText, pitch, rate ->
+                                        voiceController.previewVoice(voiceName, sampleText, pitch, rate)
+                                    }
+                                )
+                            }
+                            "permissions" -> {
+                                PermissionsScreen(
+                                    onBack = { currentScreen = "settings" }
+                                )
+                            }
+                            "code_mode" -> {
+                                CodeModeScreen(
+                                    onBack = { currentScreen = "home" },
+                                    codeSnippets = codeSnippets,
+                                    onGenerateWebsite = { prompt ->
+                                        lifecycleScope.launch {
+                                            val res = coderAgent.generateWebsite(prompt)
+                                            res.onSuccess { file ->
+                                                codeSnippets.add(
+                                                    CodeSnippet(
+                                                        title = "Generated Website",
+                                                        codeText = file.readText(),
+                                                        language = "html",
+                                                        localFilePath = file.absolutePath
+                                                    )
                                                 )
-                                            )
-                                            appDatabase.taskDao().insertTask(
-                                                TaskEntity(
-                                                    command = prompt,
-                                                    status = "SUCCESS",
-                                                    resultMessage = "Website generated at ${file.name}"
+                                                appDatabase.taskDao().insertTask(
+                                                    TaskEntity(
+                                                        command = prompt,
+                                                        status = "SUCCESS",
+                                                        resultMessage = "Website generated at ${file.name}"
+                                                    )
                                                 )
-                                            )
-                                        }.onFailure { err ->
-                                            codeSnippets.add(
-                                                CodeSnippet(
-                                                    title = "Error",
-                                                    codeText = err.localizedMessage ?: "Failed to generate website"
+                                            }.onFailure { err ->
+                                                codeSnippets.add(
+                                                    CodeSnippet(
+                                                        title = "Error",
+                                                        codeText = err.localizedMessage ?: "Failed to generate website"
+                                                    )
                                                 )
-                                            )
+                                            }
+                                        }
+                                    },
+                                    onGenerateAppRepo = { repoName, appPrompt, githubOwner ->
+                                        lifecycleScope.launch {
+                                            val res = coderAgent.generateAndPushAppProject(repoName, appPrompt, githubOwner)
+                                            res.onSuccess { msg ->
+                                                codeSnippets.add(
+                                                    CodeSnippet(
+                                                        title = "GitHub App Repo: $repoName",
+                                                        codeText = msg
+                                                    )
+                                                )
+                                                appDatabase.taskDao().insertTask(
+                                                    TaskEntity(
+                                                        command = "Create App Repo $repoName",
+                                                        status = "SUCCESS",
+                                                        resultMessage = msg
+                                                    )
+                                                )
+                                            }.onFailure { err ->
+                                                codeSnippets.add(
+                                                    CodeSnippet(
+                                                        title = "Error",
+                                                        codeText = err.localizedMessage ?: "Failed to push app repo"
+                                                    )
+                                                )
+                                            }
                                         }
                                     }
-                                },
-                                onGenerateAppRepo = { repoName, appPrompt, githubOwner ->
-                                    lifecycleScope.launch {
-                                        val res = coderAgent.generateAndPushAppProject(repoName, appPrompt, githubOwner)
-                                        res.onSuccess { msg ->
-                                            codeSnippets.add(
-                                                CodeSnippet(
-                                                    title = "GitHub App Repo: $repoName",
-                                                    codeText = msg
-                                                )
-                                            )
-                                            appDatabase.taskDao().insertTask(
-                                                TaskEntity(
-                                                    command = "Create App Repo $repoName",
-                                                    status = "SUCCESS",
-                                                    resultMessage = msg
-                                                )
-                                            )
-                                        }.onFailure { err ->
-                                            codeSnippets.add(
-                                                CodeSnippet(
-                                                    title = "Error",
-                                                    codeText = err.localizedMessage ?: "Failed to push app repo"
-                                                )
-                                            )
-                                        }
+                                )
+                            }
+                            else -> {
+                                MainAppStructure(
+                                    isListening = isListening,
+                                    isSpeaking = isSpeaking,
+                                    isTaskRunning = isTaskRunning,
+                                    isWatchingVideo = isWatchingVideo,
+                                    onStartListening = {
+                                        requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    },
+                                    onStopListening = { voiceController.stopListening() },
+                                    onStopTask = {
+                                        stopCurrentTask()
+                                        agentOrchestrator.cancelAll()
+                                    },
+                                    onStopWatching = { watchVideoManager.stopWatching() },
+                                    onSendMessage = { text ->
+                                        chatMessages.add(ChatMessage("User", text))
+                                        processUserPrompt(text, chatMessages)
+                                    },
+                                    onOpenSettings = { currentScreen = "settings" },
+                                    onOpenPermissions = { currentScreen = "permissions" },
+                                    onOpenCodeMode = { currentScreen = "code_mode" },
+                                    chatMessages = chatMessages,
+                                    pendingConfirmation = pendingConfirmation,
+                                    agentTasks = agentTasks,
+                                    onCancelAgentTask = { taskId ->
+                                        agentOrchestrator.cancelTask(taskId)
+                                    },
+                                    onStopAllAgents = {
+                                        agentOrchestrator.cancelAll()
+                                    },
+                                    currentScreen = currentScreen,
+                                    onNavigate = { screen ->
+                                        currentScreen = screen
+                                    },
+                                    isDarkTheme = isDarkTheme,
+                                    onToggleDarkTheme = { newTheme ->
+                                        isDarkTheme = newTheme
+                                        secureStorage.saveDarkTheme(newTheme)
                                     }
-                                }
-                            )
-                        }
-                        else -> {
-                            HomeScreen(
-                                isListening = isListening,
-                                isSpeaking = isSpeaking,
-                                isTaskRunning = isTaskRunning,
-                                isWatchingVideo = isWatchingVideo,
-                                onStartListening = {
-                                    requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                },
-                                onStopListening = { voiceController.stopListening() },
-                                onStopTask = {
-                                    stopCurrentTask()
-                                    agentOrchestrator.cancelAll()
-                                },
-                                onStopWatching = { watchVideoManager.stopWatching() },
-                                onSendMessage = { text ->
-                                    chatMessages.add(ChatMessage("User", text))
-                                    processUserPrompt(text, chatMessages)
-                                },
-                                onOpenSettings = { currentScreen = "settings" },
-                                onOpenCodeMode = { currentScreen = "code_mode" },
-                                chatMessages = chatMessages,
-                                pendingConfirmation = pendingConfirmation,
-                                agentTasks = agentTasks,
-                                onCancelAgentTask = { taskId ->
-                                    agentOrchestrator.cancelTask(taskId)
-                                },
-                                onStopAllAgents = {
-                                    agentOrchestrator.cancelAll()
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun SplashScreenContent() {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.myra_logo),
+                    contentDescription = "Myra Splash Logo",
+                    modifier = Modifier
+                        .size(160.dp)
+                        .clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Myra AI",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Smart Hands-Free Assistant",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -269,7 +343,7 @@ class MainActivity : ComponentActivity() {
         if (isCoderRequest && trimmedPrompt.contains("website", ignoreCase = true)) {
             val siteRes = coderAgent.generateWebsite(trimmedPrompt)
             siteRes.onSuccess { file ->
-                val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon at top to view WebView preview."
+                val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon to view WebView preview."
                 chatMessages.add(ChatMessage("Myra", msg))
                 voiceController.speak("Website generated successfully. Open Code Mode to preview in WebView.")
                 appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
@@ -515,7 +589,6 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            // Wait for screen to load/settle between steps
             if (index < total - 1) {
                 delay(1500L)
             }
