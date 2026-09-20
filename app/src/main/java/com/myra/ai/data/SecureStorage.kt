@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-class SecureStorage(context: Context) {
+open class SecureStorage(context: Context) {
 
     private val sharedPreferences: SharedPreferences by lazy {
         try {
@@ -37,7 +37,7 @@ class SecureStorage(context: Context) {
         sharedPreferences.edit().putString(KEY_GEMINI_MODEL, model).apply()
     }
 
-    fun getGeminiModel(): String {
+    open fun getGeminiModel(): String {
         return sharedPreferences.getString(KEY_GEMINI_MODEL, DEFAULT_GEMINI_MODEL)?.ifBlank { DEFAULT_GEMINI_MODEL } ?: DEFAULT_GEMINI_MODEL
     }
 
@@ -45,7 +45,7 @@ class SecureStorage(context: Context) {
         sharedPreferences.edit().putString(KEY_ACTIVE_PROVIDER, provider).apply()
     }
 
-    fun getActiveProvider(): String {
+    open fun getActiveProvider(): String {
         return sharedPreferences.getString(KEY_ACTIVE_PROVIDER, PROVIDER_GEMINI) ?: PROVIDER_GEMINI
     }
 

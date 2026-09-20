@@ -47,7 +47,8 @@ import com.myra.ai.ui.theme.*
 data class ChatMessage(
     val sender: String, // "User" or "Myra"
     val text: String,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val providerInfo: String? = null
 )
 
 data class ActionConfirmation(
@@ -1162,6 +1163,15 @@ fun ChatMessageItem(msg: ChatMessage) {
                             text = msg.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (!msg.providerInfo.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = msg.providerInfo,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }

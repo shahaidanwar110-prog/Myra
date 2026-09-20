@@ -356,9 +356,9 @@ class AnthropicProvider(private val apiKey: String) : AiProvider {
     }
 }
 
-class AiProviderManager(private val secureStorage: SecureStorage) {
+open class AiProviderManager(private val secureStorage: SecureStorage) {
 
-    fun getActiveProvider(): AiProvider {
+    open fun getActiveProvider(): AiProvider {
         val activeName = secureStorage.getActiveProvider()
         val apiKey = secureStorage.getApiKey(activeName)
 
@@ -369,12 +369,12 @@ class AiProviderManager(private val secureStorage: SecureStorage) {
         }
     }
 
-    suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String> {
+    open suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String> {
         val provider = getActiveProvider()
         return provider.generateText(prompt, systemPrompt)
     }
 
-    suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+    open suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
         val provider = getActiveProvider()
         return provider.describeScreen(image, screenTreeText, prompt)
     }
