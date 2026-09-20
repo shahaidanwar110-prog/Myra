@@ -1,5 +1,6 @@
 package com.myra.ai.accessibility
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -7,8 +8,121 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.provider.Settings
+import android.telephony.SmsManager
+import androidx.core.content.ContextCompat
 
 class PhoneControlManager(private val context: Context) {
+
+    fun findContactPhoneNumber(contactNameOrNumber: String): String? {
+        val trimmed = contactNameOrNumber.trim()
+        if (trimmed.isEmpty()) return null
+
+        // If it's already a valid phone number, return as is
+        if (trimmed.matches(Regex("^[+]?[0-9\\s\\-\\(\\)]{3,20}$")) && trimmed.any { it.isDigit() }) {
+            return trimmed
+        }
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
+
+        try {
+            val contentResolver = context.contentResolver
+            val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+            )
+            val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
+            val selectionArgs = arrayOf("%$trimmed%")
+
+            contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val numberIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    if (numberIdx != -1) {
+                        return cursor.getString(numberIdx)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    fun makeCall(recipient: String): Result<String> {
+        val phoneNumber = findContactPhoneNumber(recipient) ?: recipient
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            return Result.failure(Exception("CALL_PHONE permission is not granted. Please grant Phone permission in Settings."))
+        }
+        return try {
+            val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phoneNumber")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(callIntent)
+            Result.success("Initiating call to $recipient ($phoneNumber)...")
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to make call: ${e.localizedMessage}"))
+        }
+    }
+
+    fun sendSms(recipient: String, messageText: String): Result<String> {
+        val phoneNumber = findContactPhoneNumber(recipient) ?: recipient
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            return Result.failure(Exception("SEND_SMS permission is not granted. Please grant SMS permission in Settings."))
+        }
+        return try {
+            val smsManager: SmsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                context.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+            smsManager.sendTextMessage(phoneNumber, null, messageText, null, null)
+            Result.success("SMS sent to $recipient ($phoneNumber).")
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to send SMS: ${e.localizedMessage}"))
+        }
+    }
+
+    suspend fun openWhatsAppAndSend(recipient: String, messageText: String): Result<String> {
+        val phoneNumber = findContactPhoneNumber(recipient) ?: recipient
+        val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            data = Uri.parse("https://api.whatsapp.com/send?phone=$cleanNumber&text=${Uri.encode(messageText)}")
+            setPackage("com.whatsapp")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        return try {
+            val pm = context.packageManager
+            if (intent.resolveActivity(pm) == null) {
+                // Try without specifying package in case WhatsApp Business is installed
+                intent.setPackage(null)
+                if (intent.resolveActivity(pm) == null) {
+                    return Result.failure(Exception("WhatsApp is not installed on this device."))
+                }
+            }
+            context.startActivity(intent)
+
+            // Wait for WhatsApp screen to load
+            kotlinx.coroutines.delay(2000L)
+
+            val service = MyraAccessibilityService.getInstance()
+                ?: return Result.failure(Exception("Accessibility service is disabled. Enable Myra in Accessibility Settings."))
+
+            // Press Send button using accessibility service
+            val sendClicked = service.clickSendButton() || service.clickText("Send")
+            if (sendClicked) {
+                Result.success("Opened WhatsApp chat with $recipient and sent message.")
+            } else {
+                Result.failure(Exception("WhatsApp chat opened with text filled, but could not press Send button automatically."))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to open WhatsApp: ${e.localizedMessage}"))
+        }
+    }
 
     fun isAccessibilityServiceEnabled(): Boolean {
         return MyraAccessibilityService.isServiceRunning()

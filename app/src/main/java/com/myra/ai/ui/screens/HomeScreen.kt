@@ -31,6 +31,14 @@ data class ChatMessage(
     val isError: Boolean = false
 )
 
+data class ActionConfirmation(
+    val actionType: String, // "Call", "SMS", "WhatsApp"
+    val recipient: String,
+    val textMessage: String? = null,
+    val onConfirm: () -> Unit,
+    val onCancel: () -> Unit
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -42,7 +50,8 @@ fun HomeScreen(
     onStopTask: () -> Unit = {},
     onSendMessage: (String) -> Unit,
     onOpenSettings: () -> Unit,
-    chatMessages: List<ChatMessage>
+    chatMessages: List<ChatMessage>,
+    pendingConfirmation: ActionConfirmation? = null
 ) {
     var textInput by remember { mutableStateOf("") }
 
@@ -169,6 +178,37 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            // Confirmation Dialog
+            pendingConfirmation?.let { conf ->
+                AlertDialog(
+                    onDismissRequest = { conf.onCancel() },
+                    title = { Text("Confirm ${conf.actionType}") },
+                    text = {
+                        Column {
+                            Text("Recipient: ${conf.recipient}", fontWeight = FontWeight.Bold)
+                            conf.textMessage?.let { txt ->
+                                if (txt.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Message: $txt")
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Do you want to proceed?", style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { conf.onConfirm() }) {
+                            Text("Confirm")
+                        }
+                    },
+                    dismissButton = {
+                        OutlinedButton(onClick = { conf.onCancel() }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
 
             // Text Input Command Bar
             Row(

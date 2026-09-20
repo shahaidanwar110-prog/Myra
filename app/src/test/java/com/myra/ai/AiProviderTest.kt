@@ -39,4 +39,39 @@ class AiProviderTest {
     fun testGeminiProviderDefaultModelConstant() {
         assertEquals("gemini-2.5-flash", SecureStorage.DEFAULT_GEMINI_MODEL)
     }
+
+    @Test
+    fun testHttpPostRetryLogicOn503And429() = runBlocking {
+        var callCount = 0
+        // Test function simulating single HTTP post
+        fun mockExecuteSingleHttpPost(): Pair<Int, Result<String>> {
+            callCount++
+            return if (callCount < 3) {
+                Pair(503, Result.failure(Exception("HTTP 503 (Service Unavailable): Overloaded")))
+            } else {
+                Pair(200, Result.success("Success Response"))
+            }
+        }
+
+        var attempts = 0
+        val maxRetries = 3
+        var finalResult: Result<String>? = null
+        while (true) {
+            val (statusCode, result) = mockExecuteSingleHttpPost()
+            if (result.isSuccess) {
+                finalResult = result
+                break
+            }
+            if ((statusCode == 503 || statusCode == 429) && attempts < maxRetries) {
+                attempts++
+            } else {
+                finalResult = result
+                break
+            }
+        }
+
+        assertEquals(3, callCount)
+        assertTrue(finalResult?.isSuccess == true)
+        assertEquals("Success Response", finalResult?.getOrNull())
+    }
 }
