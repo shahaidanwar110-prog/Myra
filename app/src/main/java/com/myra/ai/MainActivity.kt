@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var gitHubManager: GitHubManager
     private lateinit var coderAgent: CoderAgent
     private lateinit var appDatabase: AppDatabase
+    private lateinit var chatViewModel: com.myra.ai.ui.viewmodel.ChatViewModel
 
     private var currentTaskJob: Job? = null
     private var isTaskRunningState = mutableStateOf(false)
@@ -85,6 +86,12 @@ class MainActivity : ComponentActivity() {
         gitHubManager = GitHubManager(secureStorage)
         coderAgent = CoderAgent(this, aiProviderManager, gitHubManager)
         appDatabase = AppDatabase.getInstance(this)
+        chatViewModel = com.myra.ai.ui.viewmodel.ChatViewModel(
+            secureStorage = secureStorage,
+            aiProviderManager = aiProviderManager,
+            phoneControlManager = phoneControlManager,
+            voiceController = voiceController
+        )
 
         TaskStopReceiver.onStopTaskRequested = {
             stopCurrentTask()
@@ -104,12 +111,14 @@ class MainActivity : ComponentActivity() {
 
                     val isListening by voiceController.isListening.collectAsState()
                     val isSpeaking by voiceController.isSpeaking.collectAsState()
-                    val isTaskRunning by remember { isTaskRunningState }
+                    val isTaskRunningStateValue by remember { isTaskRunningState }
+                    val isThinking by chatViewModel.isThinking.collectAsState()
+                    val isTaskRunning = isTaskRunningStateValue || isThinking
                     val isWatchingVideo by watchVideoManager.isWatching.collectAsState()
                     val pendingConfirmation by remember { pendingConfirmationState }
                     val agentTasks by agentOrchestrator.tasks.collectAsState()
 
-                    val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+                    val chatMessages by chatViewModel.messages.collectAsState()
                     val codeSnippets = remember { mutableStateListOf<CodeSnippet>() }
 
                     // Splash screen delay transition
@@ -121,8 +130,7 @@ class MainActivity : ComponentActivity() {
                     // Speech recognition result handler
                     LaunchedEffect(Unit) {
                         voiceController.onSpeechResultListener = { spokenText ->
-                            chatMessages.add(ChatMessage("User", spokenText))
-                            processUserPrompt(spokenText, chatMessages)
+                            processUserPrompt(spokenText)
                         }
                     }
 
@@ -231,8 +239,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onStopWatching = { watchVideoManager.stopWatching() },
                                     onSendMessage = { text ->
-                                        chatMessages.add(ChatMessage("User", text))
-                                        processUserPrompt(text, chatMessages)
+                                        processUserPrompt(text)
                                     },
                                     onOpenSettings = { currentScreen = "settings" },
                                     onOpenPermissions = { currentScreen = "permissions" },
@@ -301,7 +308,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun processUserPrompt(prompt: String, chatMessages: MutableList<ChatMessage>) {
+    private fun processUserPrompt(prompt: String) {
         currentTaskJob?.cancel()
         pendingConfirmationState.value = null
 
@@ -312,10 +319,31 @@ class MainActivity : ComponentActivity() {
             stopCurrentTask()
             agentOrchestrator.cancelAll()
             MyraAccessibilityService.getInstance()?.clearGuideHighlight()
-            chatMessages.add(ChatMessage("Myra", "Task, video watching and guide overlay stopped."))
+            chatViewModel.addMessage(ChatMessage("Myra", "Task, video watching and guide overlay stopped."))
             voiceController.speak("Task stopped.")
             return
         }
+
+        val isSpecialTask = trimmedPrompt.contains("website", ignoreCase = true) ||
+                trimmedPrompt.contains("build app", ignoreCase = true) ||
+                trimmedPrompt.contains("create app", ignoreCase = true) ||
+                trimmedPrompt.contains("guide", ignoreCase = true) ||
+                trimmedPrompt.contains("show me where to tap", ignoreCase = true) ||
+                trimmedPrompt.contains("where to click", ignoreCase = true) ||
+                trimmedPrompt.contains("watch video", ignoreCase = true) ||
+                trimmedPrompt.contains("describe screen", ignoreCase = true) ||
+                trimmedPrompt.contains("what is on screen", ignoreCase = true) ||
+                trimmedPrompt.contains("screenshot", ignoreCase = true)
+
+        if (!isSpecialTask) {
+            // Standard user conversation or phone command -> handled by chatViewModel
+            chatViewModel.sendMessage(prompt) { action, callback ->
+                showConfirmationDialogForAction(action, callback)
+            }
+            return
+        }
+
+        chatViewModel.addMessage(ChatMessage("User", trimmedPrompt))
 
         val isCoderRequest = trimmedPrompt.contains("website", ignoreCase = true) ||
                 trimmedPrompt.contains("build app", ignoreCase = true) ||
@@ -330,26 +358,59 @@ class MainActivity : ComponentActivity() {
             name = agentName,
             description = trimmedPrompt
         ) {
-            runTaskInternal(trimmedPrompt, prompt, chatMessages, isCoderRequest)
+            runTaskInternal(trimmedPrompt, prompt, isCoderRequest)
         }
+    }
+
+    private fun showConfirmationDialogForAction(
+        action: SystemAction,
+        onResult: (Boolean) -> Unit
+    ) {
+        val actionTypeName = when (action.type) {
+            ActionType.CALL -> "Call"
+            ActionType.SEND_SMS -> "SMS"
+            ActionType.WHATSAPP -> "WhatsApp Message"
+            ActionType.POST_SOCIAL_MEDIA -> "Social Media Post"
+            else -> action.type.name
+        }
+        val recipient = action.recipient ?: action.platform ?: action.target ?: "Unknown"
+        val textMsg = action.textToType ?: action.target
+
+        pendingConfirmationState.value = ActionConfirmation(
+            actionType = actionTypeName,
+            recipient = recipient,
+            textMessage = textMsg,
+            platform = action.platform,
+            caption = action.caption,
+            hashtags = action.hashtags,
+            onConfirm = {
+                pendingConfirmationState.value = null
+                onResult(true)
+            },
+            onCancel = {
+                pendingConfirmationState.value = null
+                onResult(false)
+            }
+        )
     }
 
     private suspend fun runTaskInternal(
         trimmedPrompt: String,
         prompt: String,
-        chatMessages: MutableList<ChatMessage>,
         isCoderRequest: Boolean = false
     ) {
+        val providerInfoStr = chatViewModel.getProviderInfo()
+
         if (isCoderRequest && trimmedPrompt.contains("website", ignoreCase = true)) {
             val siteRes = coderAgent.generateWebsite(trimmedPrompt)
             siteRes.onSuccess { file ->
                 val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon to view WebView preview."
-                chatMessages.add(ChatMessage("Myra", msg))
+                chatViewModel.addMessage(ChatMessage("Myra", msg, providerInfo = providerInfoStr))
                 voiceController.speak("Website generated successfully. Open Code Mode to preview in WebView.")
                 appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
             }.onFailure { err ->
                 val errMsg = "Failed to generate website: ${err.localizedMessage ?: err.message}"
-                chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
                 voiceController.speak(errMsg)
             }
             return
@@ -367,7 +428,7 @@ class MainActivity : ComponentActivity() {
                 val service = MyraAccessibilityService.getInstance()
                 if (service == null) {
                     val errMsg = "Accessibility service is disabled. Enable Myra in Accessibility Settings."
-                    chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                    chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
                     voiceController.speak(errMsg)
                 } else {
                     val bitmap = kotlin.coroutines.suspendCoroutine { continuation ->
@@ -403,16 +464,16 @@ class MainActivity : ComponentActivity() {
                         val highlighted = service.showGuideHighlight(targetText, instruction)
                         if (highlighted) {
                             val msgText = "Guide: $instruction (Marked '$targetText')"
-                            chatMessages.add(ChatMessage("Myra", msgText))
+                            chatViewModel.addMessage(ChatMessage("Myra", msgText, providerInfo = providerInfoStr))
                             voiceController.speak(instruction)
                         } else {
                             val msgText = "Could not locate '$targetText' on screen to mark. Instruction: $instruction"
-                            chatMessages.add(ChatMessage("Myra", msgText))
+                            chatViewModel.addMessage(ChatMessage("Myra", msgText, providerInfo = providerInfoStr))
                             voiceController.speak(instruction)
                         }
                     }.onFailure { err ->
                         val errText = "Guide mode failed: ${err.localizedMessage ?: err.message}"
-                        chatMessages.add(ChatMessage("Myra", errText, isError = true))
+                        chatViewModel.addMessage(ChatMessage("Myra", errText, isError = true, providerInfo = providerInfoStr))
                         voiceController.speak(errText)
                     }
                 }
@@ -425,10 +486,10 @@ class MainActivity : ComponentActivity() {
 
         // Handle "Watch video" mode command
         if (trimmedPrompt.contains("watch video", ignoreCase = true) || trimmedPrompt.contains("watch this video", ignoreCase = true)) {
-            chatMessages.add(ChatMessage("Myra", "Started Watch Video mode. Myra is watching your screen..."))
+            chatViewModel.addMessage(ChatMessage("Myra", "Started Watch Video mode. Myra is watching your screen...", providerInfo = providerInfoStr))
             voiceController.speak("Started Watch Video mode. Myra is watching your screen.")
             watchVideoManager.startWatching(lifecycleScope) { summary ->
-                chatMessages.add(ChatMessage("Myra", summary))
+                chatViewModel.addMessage(ChatMessage("Myra", summary, providerInfo = providerInfoStr))
                 voiceController.speak(summary)
             }
             return
@@ -446,7 +507,7 @@ class MainActivity : ComponentActivity() {
                 val service = MyraAccessibilityService.getInstance()
                 if (service == null) {
                     val errMsg = "Accessibility service is disabled. Enable Myra in Accessibility Settings."
-                    chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                    chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
                     voiceController.speak(errMsg)
                 } else {
                     val bitmap = kotlin.coroutines.suspendCoroutine { continuation ->
@@ -455,11 +516,11 @@ class MainActivity : ComponentActivity() {
                     val treeText = service.dumpNodeTreeText()
                     val descResult = aiProviderManager.describeScreen(bitmap, treeText, "Describe what is on screen in detail and explain key elements.")
                     descResult.onSuccess { desc ->
-                        chatMessages.add(ChatMessage("Myra", desc))
+                        chatViewModel.addMessage(ChatMessage("Myra", desc, providerInfo = providerInfoStr))
                         voiceController.speak(desc)
                     }.onFailure { err ->
                         val errText = "Screen analysis failed: ${err.localizedMessage ?: err.message}"
-                        chatMessages.add(ChatMessage("Myra", errText, isError = true))
+                        chatViewModel.addMessage(ChatMessage("Myra", errText, isError = true, providerInfo = providerInfoStr))
                         voiceController.speak(errText)
                     }
                 }
@@ -468,42 +529,6 @@ class MainActivity : ComponentActivity() {
                 taskNotificationManager.clearNotification()
             }
             return
-        }
-
-        // Check if command can be parsed on-device without calling AI
-        val localAction = com.myra.ai.ai.CommandParser.parseCommand(trimmedPrompt)
-        if (localAction != null) {
-            currentTaskJob = lifecycleScope.launch {
-                isTaskRunningState.value = true
-                taskNotificationManager.showTaskRunningNotification("Executing command: $trimmedPrompt")
-                executeSingleActionWithConfirmation(localAction, chatMessages)
-                isTaskRunningState.value = false
-                taskNotificationManager.clearNotification()
-            }
-            return
-        }
-
-        currentTaskJob = lifecycleScope.launch {
-            isTaskRunningState.value = true
-            taskNotificationManager.showTaskRunningNotification("Processing command: $prompt")
-
-            val result = aiProviderManager.generateText(prompt, PhoneActionExecutor.SYSTEM_PROMPT)
-
-            result.onSuccess { reply ->
-                val rootAction = PhoneActionExecutor.parseAction(reply)
-                if (rootAction.type == ActionType.MULTI_STEP && !rootAction.steps.isNullOrEmpty()) {
-                    executeMultiStepTask(rootAction.steps, chatMessages)
-                } else {
-                    executeSingleActionWithConfirmation(rootAction, chatMessages)
-                }
-            }.onFailure { err ->
-                val errorMsg = err.localizedMessage ?: "Unknown error"
-                chatMessages.add(ChatMessage("Myra", "Error: $errorMsg", isError = true))
-                voiceController.speak("Error: $errorMsg")
-            }
-
-            isTaskRunningState.value = false
-            taskNotificationManager.clearNotification()
         }
     }
 
