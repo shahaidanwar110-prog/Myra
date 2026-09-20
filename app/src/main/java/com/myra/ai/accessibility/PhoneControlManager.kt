@@ -301,4 +301,47 @@ class PhoneControlManager(private val context: Context) {
             Result.failure(Exception("Input field not focused. Please focus an input field first."))
         }
     }
+
+    suspend fun postToSocialPlatform(platform: String, captionAndHashtags: String): Result<String> {
+        val openResult = openAppByName(platform)
+        if (openResult.isFailure) {
+            return openResult
+        }
+
+        kotlinx.coroutines.delay(2500L)
+
+        val service = MyraAccessibilityService.getInstance()
+            ?: return Result.failure(Exception("Accessibility service is disabled. Enable Myra in Accessibility Settings."))
+
+        // Attempt accessibility navigation based on platform
+        val fieldClicked = when {
+            platform.contains("YouTube", ignoreCase = true) -> {
+                service.clickText("Create") || service.clickText("Upload") || service.clickText("Add") || service.clickText("+")
+            }
+            platform.contains("TikTok", ignoreCase = true) -> {
+                service.clickText("Post") || service.clickText("Add caption") || service.clickText("+")
+            }
+            platform.contains("Facebook", ignoreCase = true) -> {
+                service.clickText("What's on your mind?") || service.clickText("Create post") || service.clickText("Post")
+            }
+            platform.contains("Instagram", ignoreCase = true) -> {
+                service.clickText("New post") || service.clickText("Write a caption") || service.clickText("+")
+            }
+            else -> false
+        }
+
+        if (fieldClicked) {
+            kotlinx.coroutines.delay(1000L)
+            service.typeText(captionAndHashtags)
+            return Result.success("Opened $platform, navigated to post creation field, and filled caption: \"$captionAndHashtags\".")
+        } else {
+            // Fallback: try direct text typing if an input field is already focused
+            val typed = service.typeText(captionAndHashtags)
+            return if (typed) {
+                Result.success("Opened $platform and typed caption into focused input field: \"$captionAndHashtags\".")
+            } else {
+                Result.success("Opened $platform. Please select the caption field to complete posting \"$captionAndHashtags\".")
+            }
+        }
+    }
 }

@@ -18,6 +18,7 @@ enum class ActionType {
     CALL,
     SEND_SMS,
     WHATSAPP,
+    POST_SOCIAL_MEDIA,
     MULTI_STEP,
     CHAT_RESPONSE
 }
@@ -27,6 +28,9 @@ data class SystemAction(
     val target: String? = null,
     val textToType: String? = null,
     val recipient: String? = null,
+    val platform: String? = null,
+    val caption: String? = null,
+    val hashtags: String? = null,
     val steps: List<SystemAction>? = null,
     val message: String? = null
 )
@@ -83,7 +87,10 @@ object PhoneActionExecutor {
         15. To WhatsApp a contact:
            {"action": "WHATSAPP", "recipient": "Contact Name or Phone Number", "text": "Message content", "message": "Opening WhatsApp..."}
 
-        16. For multi-step tasks requiring sequential actions (e.g., "Open YouTube and search for cats"):
+        16. To post to social media (YouTube, TikTok, Facebook, Instagram):
+           {"action": "POST_SOCIAL_MEDIA", "platform": "YouTube/TikTok/Facebook/Instagram", "caption": "Caption text", "hashtags": "#hashtag1 #hashtag2", "message": "Preparing social media post..."}
+
+        17. For multi-step tasks requiring sequential actions (e.g., "Open YouTube and search for cats"):
            {"action": "MULTI_STEP", "steps": [
                {"action": "OPEN_APP", "target": "YouTube", "message": "Launching YouTube"},
                {"action": "CLICK_TEXT", "target": "Search", "message": "Finding search control"},
@@ -91,7 +98,7 @@ object PhoneActionExecutor {
                {"action": "CLICK_TEXT", "target": "Search", "message": "Submitting search"}
            ], "message": "Starting multi-step task..."}
 
-        17. For standard conversation or answers:
+        18. For standard conversation or answers:
            {"action": "CHAT_RESPONSE", "message": "Your conversational answer here"}
     """.trimIndent()
 
@@ -128,6 +135,9 @@ object PhoneActionExecutor {
             val target = extractJsonValue(cleanJson, "target")
             val textToType = extractJsonValue(cleanJson, "text")
             val recipient = extractJsonValue(cleanJson, "recipient")
+            val platform = extractJsonValue(cleanJson, "platform")
+            val caption = extractJsonValue(cleanJson, "caption")
+            val hashtags = extractJsonValue(cleanJson, "hashtags")
 
             val actionType = if (actionStr != null) {
                 try {
@@ -144,6 +154,9 @@ object PhoneActionExecutor {
                 target = target,
                 textToType = textToType,
                 recipient = recipient,
+                platform = platform,
+                caption = caption,
+                hashtags = hashtags,
                 message = if (actionType == ActionType.CHAT_RESPONSE && message == null) cleanJson else message
             )
         }
@@ -160,6 +173,9 @@ object PhoneActionExecutor {
         val target = if (jsonObject.has("target") && !jsonObject.isNull("target")) jsonObject.optString("target") else null
         val textToType = if (jsonObject.has("text") && !jsonObject.isNull("text")) jsonObject.optString("text") else null
         val recipient = if (jsonObject.has("recipient") && !jsonObject.isNull("recipient")) jsonObject.optString("recipient") else null
+        val platform = if (jsonObject.has("platform") && !jsonObject.isNull("platform")) jsonObject.optString("platform") else null
+        val caption = if (jsonObject.has("caption") && !jsonObject.isNull("caption")) jsonObject.optString("caption") else null
+        val hashtags = if (jsonObject.has("hashtags") && !jsonObject.isNull("hashtags")) jsonObject.optString("hashtags") else null
         val message = if (jsonObject.has("message") && !jsonObject.isNull("message")) jsonObject.optString("message") else null
 
         val steps = if (actionType == ActionType.MULTI_STEP && jsonObject.has("steps") && !jsonObject.isNull("steps")) {
@@ -179,6 +195,9 @@ object PhoneActionExecutor {
             target = target,
             textToType = textToType,
             recipient = recipient,
+            platform = platform,
+            caption = caption,
+            hashtags = hashtags,
             steps = steps,
             message = message
         )
@@ -220,6 +239,11 @@ object PhoneActionExecutor {
                 val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for WhatsApp."))
                 val text = action.textToType ?: action.target ?: ""
                 phoneControlManager.openWhatsAppAndSend(recipient, text)
+            }
+            ActionType.POST_SOCIAL_MEDIA -> {
+                val plat = action.platform ?: action.target ?: "Social App"
+                val fullCaption = "${action.caption ?: ""} ${action.hashtags ?: ""}".trim()
+                phoneControlManager.postToSocialPlatform(plat, fullCaption)
             }
             ActionType.MULTI_STEP -> {
                 Result.success(action.message ?: "Starting multi-step task...")

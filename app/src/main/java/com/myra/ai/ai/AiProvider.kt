@@ -1,11 +1,14 @@
 package com.myra.ai.ai
 
+import android.graphics.Bitmap
+import android.util.Base64
 import com.myra.ai.data.SecureStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -14,6 +17,14 @@ import java.net.URL
 interface AiProvider {
     val name: String
     suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String>
+    suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String>
+}
+
+internal fun bitmapToBase64Jpeg(bitmap: Bitmap): String {
+    val outputStream = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+    val byteArray = outputStream.toByteArray()
+    return Base64.encodeToString(byteArray, Base64.NO_WRAP)
 }
 
 internal fun executeSingleHttpPost(
@@ -129,6 +140,46 @@ class GeminiProvider(
                 .getString("text")
         }
     }
+
+    override suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("Google Gemini API key is missing. Please set it in Settings."))
+        }
+
+        val parts = JSONArray()
+        val textPrompt = "$prompt\n\nScreen Node Tree:\n$screenTreeText"
+        parts.put(JSONObject().apply { put("text", textPrompt) })
+
+        if (image != null) {
+            val base64Jpeg = bitmapToBase64Jpeg(image)
+            parts.put(JSONObject().apply {
+                put("inlineData", JSONObject().apply {
+                    put("mimeType", "image/jpeg")
+                    put("data", base64Jpeg)
+                })
+            })
+        }
+
+        val body = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply { put("parts", parts) })
+            })
+        }
+
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_GEMINI_MODEL }
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$effectiveModel:generateContent?key=$apiKey"
+        val headers = mapOf("Content-Type" to "application/json")
+
+        return httpPostRequest(url, headers, body.toString()).mapCatching { json ->
+            val obj = JSONObject(json)
+            obj.getJSONArray("candidates")
+                .getJSONObject(0)
+                .getJSONObject("content")
+                .getJSONArray("parts")
+                .getJSONObject(0)
+                .getString("text")
+        }
+    }
 }
 
 class OpenAiProvider(private val apiKey: String) : AiProvider {
@@ -150,6 +201,55 @@ class OpenAiProvider(private val apiKey: String) : AiProvider {
             put("role", "user")
             put("content", prompt)
         })
+
+        val body = JSONObject().apply {
+            put("model", "gpt-4o")
+            put("messages", messages)
+            put("max_tokens", 2048)
+        }
+
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "Authorization" to "Bearer $apiKey"
+        )
+
+        return httpPostRequest("https://api.openai.com/v1/chat/completions", headers, body.toString()).mapCatching { json ->
+            val obj = JSONObject(json)
+            obj.getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
+        }
+    }
+
+    override suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("OpenAI API key is missing. Please set it in Settings."))
+        }
+
+        val contentArray = JSONArray()
+        val textPrompt = "$prompt\n\nScreen Node Tree:\n$screenTreeText"
+        contentArray.put(JSONObject().apply {
+            put("type", "text")
+            put("text", textPrompt)
+        })
+
+        if (image != null) {
+            val base64Jpeg = bitmapToBase64Jpeg(image)
+            contentArray.put(JSONObject().apply {
+                put("type", "image_url")
+                put("image_url", JSONObject().apply {
+                    put("url", "data:image/jpeg;base64,$base64Jpeg")
+                })
+            })
+        }
+
+        val messages = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("content", contentArray)
+            })
+        }
 
         val body = JSONObject().apply {
             put("model", "gpt-4o")
@@ -205,6 +305,53 @@ class AnthropicProvider(private val apiKey: String) : AiProvider {
             obj.getJSONArray("content").getJSONObject(0).getString("text")
         }
     }
+
+    override suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("Anthropic API key is missing. Please set it in Settings."))
+        }
+
+        val contentArray = JSONArray()
+        val textPrompt = "$prompt\n\nScreen Node Tree:\n$screenTreeText"
+        contentArray.put(JSONObject().apply {
+            put("type", "text")
+            put("text", textPrompt)
+        })
+
+        if (image != null) {
+            val base64Jpeg = bitmapToBase64Jpeg(image)
+            contentArray.put(JSONObject().apply {
+                put("type", "image")
+                put("source", JSONObject().apply {
+                    put("type", "base64")
+                    put("media_type", "image/jpeg")
+                    put("data", base64Jpeg)
+                })
+            })
+        }
+
+        val body = JSONObject().apply {
+            put("model", "claude-3-5-sonnet-20241022")
+            put("max_tokens", 2048)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", contentArray)
+                })
+            })
+        }
+
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "x-api-key" to apiKey,
+            "anthropic-version" to "2023-06-01"
+        )
+
+        return httpPostRequest("https://api.anthropic.com/v1/messages", headers, body.toString()).mapCatching { json ->
+            val obj = JSONObject(json)
+            obj.getJSONArray("content").getJSONObject(0).getString("text")
+        }
+    }
 }
 
 class AiProviderManager(private val secureStorage: SecureStorage) {
@@ -223,5 +370,30 @@ class AiProviderManager(private val secureStorage: SecureStorage) {
     suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String> {
         val provider = getActiveProvider()
         return provider.generateText(prompt, systemPrompt)
+    }
+
+    suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        val provider = getActiveProvider()
+        return provider.describeScreen(image, screenTreeText, prompt)
+    }
+
+    suspend fun generateSocialPostContent(platform: String, topic: String): Result<Pair<String, String>> {
+        val prompt = """
+            Write a creative caption and relevant viral hashtags for posting a video/post about "$topic" on $platform.
+            Respond in this exact JSON format:
+            {"caption": "Your generated caption here", "hashtags": "#hashtag1 #hashtag2 #hashtag3"}
+        """.trimIndent()
+
+        val result = generateText(prompt)
+        return result.mapCatching { text ->
+            var clean = text.trim()
+            if (clean.startsWith("```json")) clean = clean.substring("```json".length)
+            if (clean.startsWith("```")) clean = clean.substring("```".length)
+            if (clean.endsWith("```")) clean = clean.substring(0, clean.length - 3)
+            val json = JSONObject(clean.trim())
+            val cap = json.optString("caption", "Check this out!")
+            val tags = json.optString("hashtags", "#viral #trending")
+            Pair(cap, tags)
+        }
     }
 }
