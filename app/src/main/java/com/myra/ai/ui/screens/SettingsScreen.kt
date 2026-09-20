@@ -21,6 +21,7 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var geminiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)) }
+    var geminiModel by remember { mutableStateOf(secureStorage.getGeminiModel()) }
     var openAiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_OPENAI)) }
     var anthropicKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_ANTHROPIC)) }
     var activeProvider by remember { mutableStateOf(secureStorage.getActiveProvider()) }
@@ -55,6 +56,15 @@ fun SettingsScreen(
                 label = { Text("Google Gemini API Key") },
                 visualTransformation = PasswordVisualTransformation(),
                 leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = geminiModel,
+                onValueChange = { geminiModel = it },
+                label = { Text("Google Gemini Model") },
+                placeholder = { Text("gemini-2.5-flash") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -126,6 +136,7 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
+                    secureStorage.saveGeminiModel(geminiModel)
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
                     secureStorage.saveActiveProvider(activeProvider)

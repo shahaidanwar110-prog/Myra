@@ -38,20 +38,41 @@ internal suspend fun httpPostRequest(
         }
 
         val statusCode = connection.responseCode
+        val statusMessage = connection.responseMessage ?: ""
         val inputStream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
-        val response = BufferedReader(InputStreamReader(inputStream, "UTF-8")).use { it.readText() }
+        val response = if (inputStream != null) {
+            BufferedReader(InputStreamReader(inputStream, "UTF-8")).use { it.readText() }
+        } else {
+            ""
+        }
 
         if (statusCode in 200..299) {
             Result.success(response)
         } else {
-            Result.failure(Exception("HTTP $statusCode: $response"))
+            val reason = if (response.isNotBlank()) {
+                try {
+                    val jsonObj = JSONObject(response)
+                    val errorObj = jsonObj.optJSONObject("error")
+                    val msg = errorObj?.optString("message") ?: jsonObj.optString("message")
+                    if (!msg.isNullOrBlank()) msg else response
+                } catch (e: Exception) {
+                    response
+                }
+            } else {
+                statusMessage
+            }
+            val statusHeader = if (statusMessage.isNotBlank()) "$statusCode ($statusMessage)" else "$statusCode"
+            Result.failure(Exception("HTTP $statusHeader: $reason"))
         }
     } catch (e: Exception) {
-        Result.failure(Exception("Network error: ${e.localizedMessage}"))
+        Result.failure(Exception("Network error: ${e.localizedMessage ?: e.message}"))
     }
 }
 
-class GeminiProvider(private val apiKey: String) : AiProvider {
+class GeminiProvider(
+    private val apiKey: String,
+    private val model: String = SecureStorage.DEFAULT_GEMINI_MODEL
+) : AiProvider {
     override val name: String = SecureStorage.PROVIDER_GEMINI
 
     override suspend fun generateText(prompt: String, systemPrompt: String?): Result<String> {
@@ -70,7 +91,8 @@ class GeminiProvider(private val apiKey: String) : AiProvider {
             })
         }
 
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_GEMINI_MODEL }
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$effectiveModel:generateContent?key=$apiKey"
         val headers = mapOf("Content-Type" to "application/json")
 
         return httpPostRequest(url, headers, body.toString()).mapCatching { json ->
@@ -170,7 +192,7 @@ class AiProviderManager(private val secureStorage: SecureStorage) {
         return when (activeName) {
             SecureStorage.PROVIDER_OPENAI -> OpenAiProvider(apiKey)
             SecureStorage.PROVIDER_ANTHROPIC -> AnthropicProvider(apiKey)
-            else -> GeminiProvider(apiKey)
+            else -> GeminiProvider(apiKey, secureStorage.getGeminiModel())
         }
     }
 
