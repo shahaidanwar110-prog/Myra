@@ -16,11 +16,11 @@ interface AiProvider {
     suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String>
 }
 
-internal suspend fun httpPostRequest(
+internal fun executeSingleHttpPost(
     urlString: String,
     headers: Map<String, String>,
     bodyJson: String
-): Result<String> = withContext(Dispatchers.IO) {
+): Pair<Int, Result<String>> {
     try {
         val url = URL(urlString)
         val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -47,7 +47,7 @@ internal suspend fun httpPostRequest(
         }
 
         if (statusCode in 200..299) {
-            Result.success(response)
+            return Pair(statusCode, Result.success(response))
         } else {
             val reason = if (response.isNotBlank()) {
                 try {
@@ -62,11 +62,35 @@ internal suspend fun httpPostRequest(
                 statusMessage
             }
             val statusHeader = if (statusMessage.isNotBlank()) "$statusCode ($statusMessage)" else "$statusCode"
-            Result.failure(Exception("HTTP $statusHeader: $reason"))
+            return Pair(statusCode, Result.failure(Exception("HTTP $statusHeader: $reason")))
         }
     } catch (e: Exception) {
-        Result.failure(Exception("Network error: ${e.localizedMessage ?: e.message}"))
+        return Pair(-1, Result.failure(Exception("Network error: ${e.localizedMessage ?: e.message}")))
     }
+}
+
+internal suspend fun httpPostRequest(
+    urlString: String,
+    headers: Map<String, String>,
+    bodyJson: String,
+    maxRetries: Int = 3,
+    delayMs: Long = 1000L
+): Result<String> = withContext(Dispatchers.IO) {
+    var attempts = 0
+    while (true) {
+        val (statusCode, result) = executeSingleHttpPost(urlString, headers, bodyJson)
+        if (result.isSuccess) {
+            return@withContext result
+        }
+        if ((statusCode == 503 || statusCode == 429) && attempts < maxRetries) {
+            attempts++
+            kotlinx.coroutines.delay(delayMs)
+        } else {
+            return@withContext result
+        }
+    }
+    @Suppress("UNREACHABLE_CODE")
+    Result.failure(Exception("Unknown error"))
 }
 
 class GeminiProvider(

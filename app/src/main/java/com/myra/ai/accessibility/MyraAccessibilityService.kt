@@ -85,6 +85,48 @@ class MyraAccessibilityService : AccessibilityService() {
         return null
     }
 
+    fun clickSendButton(): Boolean {
+        val rootNode = rootInActiveWindow ?: return false
+        val sendNode = findSendButtonNode(rootNode)
+        val result = if (sendNode != null) {
+            var curr: AccessibilityNodeInfo? = sendNode
+            var clicked = false
+            while (curr != null) {
+                if (curr.isClickable) {
+                    clicked = curr.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    if (clicked) break
+                }
+                curr = curr.parent
+            }
+            sendNode.recycle()
+            clicked
+        } else {
+            false
+        }
+        rootNode.recycle()
+        return result
+    }
+
+    private fun findSendButtonNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val text = node.text?.toString() ?: node.contentDescription?.toString()
+        val viewId = node.viewIdResourceName ?: ""
+        if ((text != null && (text.equals("Send", ignoreCase = true) || text.equals("Send message", ignoreCase = true))) ||
+            viewId.contains("send", ignoreCase = true)
+        ) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findSendButtonNode(child)
+            if (found != null) {
+                if (found != child) child.recycle()
+                return found
+            }
+            child.recycle()
+        }
+        return null
+    }
+
     fun clickText(targetText: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
         val clickableNode = findClickableNodeByText(rootNode, targetText)

@@ -15,6 +15,10 @@ enum class ActionType {
     SCROLL_DOWN,
     CLICK_TEXT,
     TYPE_TEXT,
+    CALL,
+    SEND_SMS,
+    WHATSAPP,
+    MULTI_STEP,
     CHAT_RESPONSE
 }
 
@@ -22,6 +26,8 @@ data class SystemAction(
     val type: ActionType,
     val target: String? = null,
     val textToType: String? = null,
+    val recipient: String? = null,
+    val steps: List<SystemAction>? = null,
     val message: String? = null
 )
 
@@ -29,7 +35,7 @@ object PhoneActionExecutor {
 
     val SYSTEM_PROMPT = """
         You are Myra, an intelligent AI phone assistant.
-        When the user gives a command, evaluate if it requires a phone action or a conversational response.
+        When the user gives a command, evaluate if it requires a phone action, a call/SMS/WhatsApp message, a multi-step task, or a conversational response.
         Respond STRICTLY with a valid JSON object matching one of the following formats, without any markdown code fences or extra text:
 
         1. To open an app by name:
@@ -68,7 +74,24 @@ object PhoneActionExecutor {
         12. To type text into focused field:
            {"action": "TYPE_TEXT", "text": "Text to type", "message": "Typing text..."}
 
-        13. For standard conversation or answers:
+        13. To call a contact:
+           {"action": "CALL", "recipient": "Contact Name or Phone Number", "message": "Calling Contact..."}
+
+        14. To send an SMS:
+           {"action": "SEND_SMS", "recipient": "Contact Name or Phone Number", "text": "Message content", "message": "Sending SMS..."}
+
+        15. To WhatsApp a contact:
+           {"action": "WHATSAPP", "recipient": "Contact Name or Phone Number", "text": "Message content", "message": "Opening WhatsApp..."}
+
+        16. For multi-step tasks requiring sequential actions (e.g., "Open YouTube and search for cats"):
+           {"action": "MULTI_STEP", "steps": [
+               {"action": "OPEN_APP", "target": "YouTube", "message": "Launching YouTube"},
+               {"action": "CLICK_TEXT", "target": "Search", "message": "Finding search control"},
+               {"action": "TYPE_TEXT", "text": "cats", "message": "Typing cats"},
+               {"action": "CLICK_TEXT", "target": "Search", "message": "Submitting search"}
+           ], "message": "Starting multi-step task..."}
+
+        17. For standard conversation or answers:
            {"action": "CHAT_RESPONSE", "message": "Your conversational answer here"}
     """.trimIndent()
 
@@ -95,30 +118,73 @@ object PhoneActionExecutor {
         }
         cleanJson = cleanJson.trim()
 
-        val actionStr = extractJsonValue(cleanJson, "action")
-        val message = extractJsonValue(cleanJson, "message")
-        val target = extractJsonValue(cleanJson, "target")
-        val textToType = extractJsonValue(cleanJson, "text")
+        return try {
+            val jsonObject = org.json.JSONObject(cleanJson)
+            parseJsonObject(jsonObject)
+        } catch (e: Throwable) {
+            // Fallback regex parsing if org.json parsing fails or response isn't strict JSON
+            val actionStr = extractJsonValue(cleanJson, "action")
+            val message = extractJsonValue(cleanJson, "message")
+            val target = extractJsonValue(cleanJson, "target")
+            val textToType = extractJsonValue(cleanJson, "text")
+            val recipient = extractJsonValue(cleanJson, "recipient")
 
-        val actionType = if (actionStr != null) {
-            try {
-                ActionType.valueOf(actionStr)
-            } catch (e: Exception) {
+            val actionType = if (actionStr != null) {
+                try {
+                    ActionType.valueOf(actionStr)
+                } catch (e: Exception) {
+                    ActionType.CHAT_RESPONSE
+                }
+            } else {
                 ActionType.CHAT_RESPONSE
             }
-        } else {
+
+            SystemAction(
+                type = actionType,
+                target = target,
+                textToType = textToType,
+                recipient = recipient,
+                message = if (actionType == ActionType.CHAT_RESPONSE && message == null) cleanJson else message
+            )
+        }
+    }
+
+    private fun parseJsonObject(jsonObject: org.json.JSONObject): SystemAction {
+        val actionStr = jsonObject.optString("action", "CHAT_RESPONSE")
+        val actionType = try {
+            ActionType.valueOf(actionStr)
+        } catch (e: Exception) {
             ActionType.CHAT_RESPONSE
         }
+
+        val target = if (jsonObject.has("target") && !jsonObject.isNull("target")) jsonObject.optString("target") else null
+        val textToType = if (jsonObject.has("text") && !jsonObject.isNull("text")) jsonObject.optString("text") else null
+        val recipient = if (jsonObject.has("recipient") && !jsonObject.isNull("recipient")) jsonObject.optString("recipient") else null
+        val message = if (jsonObject.has("message") && !jsonObject.isNull("message")) jsonObject.optString("message") else null
+
+        val steps = if (actionType == ActionType.MULTI_STEP && jsonObject.has("steps") && !jsonObject.isNull("steps")) {
+            val stepsArray = jsonObject.optJSONArray("steps")
+            val list = mutableListOf<SystemAction>()
+            if (stepsArray != null) {
+                for (i in 0 until stepsArray.length()) {
+                    val stepObj = stepsArray.getJSONObject(i)
+                    list.add(parseJsonObject(stepObj))
+                }
+            }
+            list
+        } else null
 
         return SystemAction(
             type = actionType,
             target = target,
             textToType = textToType,
-            message = if (actionType == ActionType.CHAT_RESPONSE && message == null) cleanJson else message
+            recipient = recipient,
+            steps = steps,
+            message = message
         )
     }
 
-    fun executeAction(action: SystemAction, phoneControlManager: PhoneControlManager): Result<String> {
+    suspend fun executeAction(action: SystemAction, phoneControlManager: PhoneControlManager): Result<String> {
         return when (action.type) {
             ActionType.OPEN_APP -> {
                 val appName = action.target ?: return Result.failure(Exception("App name not specified."))
@@ -140,6 +206,23 @@ object PhoneActionExecutor {
             ActionType.TYPE_TEXT -> {
                 val text = action.textToType ?: action.target ?: return Result.failure(Exception("Text to type not specified."))
                 phoneControlManager.typeText(text)
+            }
+            ActionType.CALL -> {
+                val recipient = action.recipient ?: action.target ?: return Result.failure(Exception("Recipient not specified for call."))
+                phoneControlManager.makeCall(recipient)
+            }
+            ActionType.SEND_SMS -> {
+                val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for SMS."))
+                val text = action.textToType ?: action.target ?: ""
+                phoneControlManager.sendSms(recipient, text)
+            }
+            ActionType.WHATSAPP -> {
+                val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for WhatsApp."))
+                val text = action.textToType ?: action.target ?: ""
+                phoneControlManager.openWhatsAppAndSend(recipient, text)
+            }
+            ActionType.MULTI_STEP -> {
+                Result.success(action.message ?: "Starting multi-step task...")
             }
             ActionType.CHAT_RESPONSE -> {
                 Result.success(action.message ?: "")

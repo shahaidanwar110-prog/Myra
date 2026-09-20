@@ -8,11 +8,17 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.SettingsAccessibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -46,6 +52,33 @@ fun PermissionsScreen(
         )
     }
 
+    var hasPhonePermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CALL_PHONE
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    var hasSmsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.SEND_SMS
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    var hasContactsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
     var isAccessibilityEnabled by remember {
         mutableStateOf(MyraAccessibilityService.isServiceRunning())
     }
@@ -57,6 +90,18 @@ fun PermissionsScreen(
                 hasMicPermission = ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                hasPhonePermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CALL_PHONE
+                ) == PackageManager.PERMISSION_GRANTED
+                hasSmsPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.SEND_SMS
+                ) == PackageManager.PERMISSION_GRANTED
+                hasContactsPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_CONTACTS
                 ) == PackageManager.PERMISSION_GRANTED
                 isAccessibilityEnabled = MyraAccessibilityService.isServiceRunning()
             }
@@ -72,7 +117,37 @@ fun PermissionsScreen(
     ) { isGranted ->
         hasMicPermission = isGranted
         if (!isGranted) {
-            // Open App Settings if denied
+            Toast.makeText(context, "Microphone permission denied. Voice input will not work without it.", Toast.LENGTH_LONG).show()
+            openAppSettings(context)
+        }
+    }
+
+    val requestPhonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasPhonePermission = isGranted
+        if (!isGranted) {
+            Toast.makeText(context, "Phone permission denied. Myra cannot initiate phone calls.", Toast.LENGTH_LONG).show()
+            openAppSettings(context)
+        }
+    }
+
+    val requestSmsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasSmsPermission = isGranted
+        if (!isGranted) {
+            Toast.makeText(context, "SMS permission denied. Myra cannot send SMS messages.", Toast.LENGTH_LONG).show()
+            openAppSettings(context)
+        }
+    }
+
+    val requestContactsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasContactsPermission = isGranted
+        if (!isGranted) {
+            Toast.makeText(context, "Contacts permission denied. Myra cannot search contact details.", Toast.LENGTH_LONG).show()
             openAppSettings(context)
         }
     }
@@ -93,7 +168,8 @@ fun PermissionsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -112,6 +188,48 @@ fun PermissionsScreen(
                 onButtonClick = {
                     if (!hasMicPermission) {
                         requestMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            )
+
+            // Phone (Call) Permission Card
+            PermissionCard(
+                title = "Phone (Call) Permission",
+                description = "Required to make phone calls when requested.",
+                isGranted = hasPhonePermission,
+                icon = Icons.Default.Call,
+                buttonText = if (hasPhonePermission) "Granted" else "Grant Permission",
+                onButtonClick = {
+                    if (!hasPhonePermission) {
+                        requestPhonePermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                    }
+                }
+            )
+
+            // SMS Permission Card
+            PermissionCard(
+                title = "SMS Permission",
+                description = "Required to send SMS messages directly.",
+                isGranted = hasSmsPermission,
+                icon = Icons.Default.Sms,
+                buttonText = if (hasSmsPermission) "Granted" else "Grant Permission",
+                onButtonClick = {
+                    if (!hasSmsPermission) {
+                        requestSmsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+                    }
+                }
+            )
+
+            // Contacts Permission Card
+            PermissionCard(
+                title = "Contacts Permission",
+                description = "Required to find contact information for calls, SMS, and WhatsApp.",
+                isGranted = hasContactsPermission,
+                icon = Icons.Default.Contacts,
+                buttonText = if (hasContactsPermission) "Granted" else "Grant Permission",
+                onButtonClick = {
+                    if (!hasContactsPermission) {
+                        requestContactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                     }
                 }
             )
