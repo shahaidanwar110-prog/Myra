@@ -13,16 +13,24 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.myra.ai.accessibility.MyraAccessibilityService
 import com.myra.ai.accessibility.PhoneControlManager
+import com.myra.ai.ai.AgentOrchestrator
+import com.myra.ai.ai.AgentType
 import com.myra.ai.ai.AiProviderManager
 import com.myra.ai.ai.PhoneActionExecutor
 import com.myra.ai.ai.WatchVideoManager
+import com.myra.ai.coder.CoderAgent
+import com.myra.ai.coder.GitHubManager
 import com.myra.ai.data.SecureStorage
+import com.myra.ai.data.db.AppDatabase
+import com.myra.ai.data.db.TaskEntity
 import com.myra.ai.notification.TaskNotificationManager
 import com.myra.ai.notification.TaskStopReceiver
 import com.myra.ai.ai.ActionType
 import com.myra.ai.ai.SystemAction
 import com.myra.ai.ui.screens.ActionConfirmation
 import com.myra.ai.ui.screens.ChatMessage
+import com.myra.ai.ui.screens.CodeModeScreen
+import com.myra.ai.ui.screens.CodeSnippet
 import com.myra.ai.ui.screens.HomeScreen
 import com.myra.ai.ui.screens.PermissionsScreen
 import com.myra.ai.ui.screens.SettingsScreen
@@ -42,6 +50,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var phoneControlManager: PhoneControlManager
     private lateinit var taskNotificationManager: TaskNotificationManager
     private lateinit var watchVideoManager: WatchVideoManager
+    private lateinit var agentOrchestrator: AgentOrchestrator
+    private lateinit var gitHubManager: GitHubManager
+    private lateinit var coderAgent: CoderAgent
+    private lateinit var appDatabase: AppDatabase
 
     private var currentTaskJob: Job? = null
     private var isTaskRunningState = mutableStateOf(false)
@@ -64,6 +76,10 @@ class MainActivity : ComponentActivity() {
         phoneControlManager = PhoneControlManager(this)
         taskNotificationManager = TaskNotificationManager(this)
         watchVideoManager = WatchVideoManager(aiProviderManager)
+        agentOrchestrator = AgentOrchestrator(lifecycleScope)
+        gitHubManager = GitHubManager(secureStorage)
+        coderAgent = CoderAgent(this, aiProviderManager, gitHubManager)
+        appDatabase = AppDatabase.getInstance(this)
 
         TaskStopReceiver.onStopTaskRequested = {
             stopCurrentTask()
@@ -81,8 +97,10 @@ class MainActivity : ComponentActivity() {
                     val isTaskRunning by remember { isTaskRunningState }
                     val isWatchingVideo by watchVideoManager.isWatching.collectAsState()
                     val pendingConfirmation by remember { pendingConfirmationState }
+                    val agentTasks by agentOrchestrator.tasks.collectAsState()
 
                     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+                    val codeSnippets = remember { mutableStateListOf<CodeSnippet>() }
 
                     // Speech recognition result handler
                     LaunchedEffect(Unit) {
@@ -97,12 +115,78 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 secureStorage = secureStorage,
                                 onBack = { currentScreen = "home" },
-                                onOpenPermissions = { currentScreen = "permissions" }
+                                onOpenPermissions = { currentScreen = "permissions" },
+                                availableVoices = voiceController.getAvailableVoices(),
+                                onPreviewVoice = { voiceName, sampleText, pitch, rate ->
+                                    voiceController.previewVoice(voiceName, sampleText, pitch, rate)
+                                }
                             )
                         }
                         "permissions" -> {
                             PermissionsScreen(
                                 onBack = { currentScreen = "settings" }
+                            )
+                        }
+                        "code_mode" -> {
+                            CodeModeScreen(
+                                onBack = { currentScreen = "home" },
+                                codeSnippets = codeSnippets,
+                                onGenerateWebsite = { prompt ->
+                                    lifecycleScope.launch {
+                                        val res = coderAgent.generateWebsite(prompt)
+                                        res.onSuccess { file ->
+                                            codeSnippets.add(
+                                                CodeSnippet(
+                                                    title = "Generated Website",
+                                                    codeText = file.readText(),
+                                                    language = "html",
+                                                    localFilePath = file.absolutePath
+                                                )
+                                            )
+                                            appDatabase.taskDao().insertTask(
+                                                TaskEntity(
+                                                    command = prompt,
+                                                    status = "SUCCESS",
+                                                    resultMessage = "Website generated at ${file.name}"
+                                                )
+                                            )
+                                        }.onFailure { err ->
+                                            codeSnippets.add(
+                                                CodeSnippet(
+                                                    title = "Error",
+                                                    codeText = err.localizedMessage ?: "Failed to generate website"
+                                                )
+                                            )
+                                        }
+                                    }
+                                },
+                                onGenerateAppRepo = { repoName, appPrompt, githubOwner ->
+                                    lifecycleScope.launch {
+                                        val res = coderAgent.generateAndPushAppProject(repoName, appPrompt, githubOwner)
+                                        res.onSuccess { msg ->
+                                            codeSnippets.add(
+                                                CodeSnippet(
+                                                    title = "GitHub App Repo: $repoName",
+                                                    codeText = msg
+                                                )
+                                            )
+                                            appDatabase.taskDao().insertTask(
+                                                TaskEntity(
+                                                    command = "Create App Repo $repoName",
+                                                    status = "SUCCESS",
+                                                    resultMessage = msg
+                                                )
+                                            )
+                                        }.onFailure { err ->
+                                            codeSnippets.add(
+                                                CodeSnippet(
+                                                    title = "Error",
+                                                    codeText = err.localizedMessage ?: "Failed to push app repo"
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
                             )
                         }
                         else -> {
@@ -115,15 +199,26 @@ class MainActivity : ComponentActivity() {
                                     requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 },
                                 onStopListening = { voiceController.stopListening() },
-                                onStopTask = { stopCurrentTask() },
+                                onStopTask = {
+                                    stopCurrentTask()
+                                    agentOrchestrator.cancelAll()
+                                },
                                 onStopWatching = { watchVideoManager.stopWatching() },
                                 onSendMessage = { text ->
                                     chatMessages.add(ChatMessage("User", text))
                                     processUserPrompt(text, chatMessages)
                                 },
                                 onOpenSettings = { currentScreen = "settings" },
+                                onOpenCodeMode = { currentScreen = "code_mode" },
                                 chatMessages = chatMessages,
-                                pendingConfirmation = pendingConfirmation
+                                pendingConfirmation = pendingConfirmation,
+                                agentTasks = agentTasks,
+                                onCancelAgentTask = { taskId ->
+                                    agentOrchestrator.cancelTask(taskId)
+                                },
+                                onStopAllAgents = {
+                                    agentOrchestrator.cancelAll()
+                                }
                             )
                         }
                     }
@@ -141,9 +236,48 @@ class MainActivity : ComponentActivity() {
         // Handle direct stop command
         if (trimmedPrompt.equals("stop", ignoreCase = true)) {
             stopCurrentTask()
+            agentOrchestrator.cancelAll()
             MyraAccessibilityService.getInstance()?.clearGuideHighlight()
             chatMessages.add(ChatMessage("Myra", "Task, video watching and guide overlay stopped."))
             voiceController.speak("Task stopped.")
+            return
+        }
+
+        val isCoderRequest = trimmedPrompt.contains("website", ignoreCase = true) ||
+                trimmedPrompt.contains("build app", ignoreCase = true) ||
+                trimmedPrompt.contains("create app", ignoreCase = true)
+
+        val agentType = if (isCoderRequest) AgentType.CODER else AgentType.PHONE
+        val agentName = if (isCoderRequest) "Coder Agent" else "Phone Agent"
+
+        // Delegate to AgentOrchestrator for multi-agent scheduling
+        agentOrchestrator.runAgentTask(
+            type = agentType,
+            name = agentName,
+            description = trimmedPrompt
+        ) {
+            runTaskInternal(trimmedPrompt, prompt, chatMessages, isCoderRequest)
+        }
+    }
+
+    private suspend fun runTaskInternal(
+        trimmedPrompt: String,
+        prompt: String,
+        chatMessages: MutableList<ChatMessage>,
+        isCoderRequest: Boolean = false
+    ) {
+        if (isCoderRequest && trimmedPrompt.contains("website", ignoreCase = true)) {
+            val siteRes = coderAgent.generateWebsite(trimmedPrompt)
+            siteRes.onSuccess { file ->
+                val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon at top to view WebView preview."
+                chatMessages.add(ChatMessage("Myra", msg))
+                voiceController.speak("Website generated successfully. Open Code Mode to preview in WebView.")
+                appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
+            }.onFailure { err ->
+                val errMsg = "Failed to generate website: ${err.localizedMessage ?: err.message}"
+                chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                voiceController.speak(errMsg)
+            }
             return
         }
 
@@ -401,6 +535,9 @@ class MainActivity : ComponentActivity() {
         MyraAccessibilityService.getInstance()?.clearGuideHighlight()
         taskNotificationManager.clearNotification()
         voiceController.stopListening()
+        if (::agentOrchestrator.isInitialized) {
+            agentOrchestrator.cancelAll()
+        }
     }
 
     override fun onDestroy() {

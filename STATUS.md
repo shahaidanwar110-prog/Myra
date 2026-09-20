@@ -1,33 +1,69 @@
 # Myra AI Assistant Implementation Status
 
-## Checkpoint A: Screen Understanding & Watch Video Mode
+## Checkpoint A: Chat Selection & Copy Features
 - **Status**: Completed & Verified
 - **What Works**:
-  - `MyraAccessibilityService.captureScreenshot()`: Takes screenshot using `takeScreenshot` API on Android 11+ (API 30+).
-  - `MyraAccessibilityService.dumpNodeTreeText()`: Extracts structured accessibility node tree with text, bounds, clickable and editable attributes.
-  - `AiProvider.describeScreen()`: Vision model screen analysis support for Google Gemini (`inlineData`), OpenAI (`image_url`), and Anthropic (`image` base64).
-  - `WatchVideoManager`: Continuous frame polling (2-3 second intervals) with node tree extraction and AI video stream narration.
-  - HomeScreen & MainActivity UI: Visible "Myra is watching" indicator banner with instant Stop button and Stop command handling.
-- **What is Missing / Fallbacks**:
-  - Direct system audio capture (`AudioPlaybackCaptureConfiguration`) relies on fallback to screen frame analysis and accessibility captions if app flags block internal audio recording.
+  - Message Text Selection: Every message text in the chat history is wrapped in Compose `SelectionContainer`, making message text fully selectable and copyable.
+  - Per-message Copy Button: Each chat message item includes an icon button to copy that specific message's text directly to the system clipboard (`LocalClipboardManager`).
+  - Top "Copy Chat" Button: TopAppBar includes a "Copy chat" action button that formats the entire conversation history into text and copies it to clipboard.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `STATUS.md`
 
-## Checkpoint B: Guide Mode & Accessibility Overlay
+## Checkpoint B: Multi-Agent Orchestrator & Live Status Cards
 - **Status**: Completed & Verified
 - **What Works**:
-  - `GuideOverlayManager`: Manages transparent `TYPE_ACCESSIBILITY_OVERLAY` view with custom drawing (`GuideOverlayView`) over target element bounds.
-  - Highlight drawing: Renders green target boundary box, pointing arrow, and instruction label banner above target element. Touch events pass through to underlying app.
-  - `MyraAccessibilityService.showGuideHighlight()`: Finds target bounds from accessibility tree and draws overlay.
-  - Spoken & Written Coaching: Speaks instructions via `VoiceController` (e.g. Urdu/Hindi/English "Yahan click karo") and records written steps in chat history.
-  - Instant Stop: Tapping Stop or speaking "stop" immediately clears guide overlay and cancels task.
-- **What is Missing / Fallbacks**:
-  - If a target element is off-screen or not rendered in the accessibility tree, Myra speaks the instruction and reports that the mark couldn't be located on screen instead of guessing invalid coordinates.
+  - `AgentOrchestrator`: Manages parallel execution of up to 3 tasks concurrently using Kotlin Coroutines and `Semaphore(3)`.
+  - Global UI Lock: Uses `Mutex` to guarantee only 1 UI/Phone Agent (`AgentType.PHONE`) task operates on the screen at a time, queuing additional UI requests.
+  - Live Agent Status Cards: Displays active agent cards on `HomeScreen` with status badge (QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED) and task description.
+  - Per-agent Cancel Button: Each live agent card features an individual Cancel (`x`) button to stop specific agent tasks via `Job.cancel()`.
+  - Global Stop-All Button: Cancels all running and queued agent tasks instantly.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ai/AgentOrchestrator.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
 
-## Checkpoint C: Social Media Posting (YouTube, TikTok, Facebook, Instagram)
+## Checkpoint C: Builder Coder Agent, WebView Preview, GitHub Push & Room Database
 - **Status**: Completed & Verified
 - **What Works**:
-  - Content Generation: `AiProvider.generateSocialPostContent()` generates creative captions and viral hashtags tailored for YouTube, TikTok, Facebook, and Instagram.
-  - Action Executor: Parses `POST_SOCIAL_MEDIA` JSON action with platform, caption, and hashtags fields.
-  - Field Filling Automation: `PhoneControlManager.postToSocialPlatform()` launches the target app, searches for post/caption fields using accessibility tree navigation, and fills caption + hashtags.
-  - Pre-Post Confirmation Card: Before final posting, displays a confirmation dialog card in `HomeScreen` showing platform name, generated caption, hashtags, and Confirm/Cancel buttons. Proceeding triggers automated app entry.
+  - `CoderAgent`: Generates complete responsive HTML/CSS/JS websites and saves them locally in application storage (`files/websites/index.html`).
+  - Local WebView Preview: Provides an interactive modal previewing local generated website HTML files using Android `WebView`.
+  - Full App Generator & GitHub Push: Generates complete Android app projects, creates GitHub repositories via GitHub REST API, pushes files (including GitHub Actions `.github/workflows/build.yml` that builds debug APK), using user's encrypted GitHub token (`SecureStorage`).
+  - Code Mode Screen (`CodeModeScreen`): Interactive code screen with formatted code viewer, save file, share file, and push app project to GitHub capabilities.
+  - Room Database (`AppDatabase`, `TaskEntity`, `TaskDao`): Persistent task and command history database using Room & KSP.
+- **Files Pushed**:
+  - `build.gradle.kts`
+  - `app/build.gradle.kts`
+  - `app/src/main/java/com/myra/ai/coder/CoderAgent.kt`
+  - `app/src/main/java/com/myra/ai/coder/GitHubManager.kt`
+  - `app/src/main/java/com/myra/ai/data/db/TaskEntity.kt`
+  - `app/src/main/java/com/myra/ai/data/db/TaskDao.kt`
+  - `app/src/main/java/com/myra/ai/data/db/AppDatabase.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/CodeModeScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
+## Checkpoint D: Voice Picker in Settings (TTS Voices, Favorites & Sliders)
+- **Status**: Completed & Verified
+- **What Works**:
+  - Voice Picker by Language: Enumerates system `TextToSpeech` voices for each language (English, Urdu, Hindi) with language filter tabs.
+  - Voice Preview Button: Renders a Preview button next to each system voice to play sample spoken audio with custom pitch and speed settings.
+  - Save Up to 5 Favorites: Allows users to save up to 5 favorite voices labeled with custom Male/Female tags and language tags stored in `SecureStorage`.
+  - Pitch & Speed Sliders: Interactive sliders for adjusting TTS Pitch (0.5x to 2.0x) and Speech Speed/Rate (0.5x to 2.0x) that take immediate effect during text-to-speech synthesis.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
 - **What is Missing / Fallbacks**:
-  - Final post publication relies on user review/confirmation card or app UI accessibility tree compatibility when an app updates its internal view IDs or UI structure.
+  - None.
+
+## Previous Checkpoints
+- Screen Understanding & Watch Video Mode (Completed)
+- Guide Mode & Accessibility Overlay (Completed)
+- Social Media Posting (Completed)

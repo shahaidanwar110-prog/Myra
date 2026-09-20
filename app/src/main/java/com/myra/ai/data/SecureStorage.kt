@@ -57,6 +57,46 @@ class SecureStorage(context: Context) {
         return sharedPreferences.getString(KEY_LANGUAGE, "en-US") ?: "en-US"
     }
 
+    fun saveString(key: String, value: String) {
+        sharedPreferences.edit().putString(key, value).apply()
+    }
+
+    fun getString(key: String): String {
+        return sharedPreferences.getString(key, "") ?: ""
+    }
+
+    fun savePitch(pitch: Float) {
+        sharedPreferences.edit().putFloat("tts_pitch", pitch).apply()
+    }
+
+    fun getPitch(): Float {
+        return sharedPreferences.getFloat("tts_pitch", 1.0f)
+    }
+
+    fun saveSpeechRate(rate: Float) {
+        sharedPreferences.edit().putFloat("tts_speech_rate", rate).apply()
+    }
+
+    fun getSpeechRate(): Float {
+        return sharedPreferences.getFloat("tts_speech_rate", 1.0f)
+    }
+
+    fun saveSelectedVoice(voiceName: String) {
+        saveString("selected_tts_voice", voiceName)
+    }
+
+    fun getSelectedVoice(): String {
+        return getString("selected_tts_voice")
+    }
+
+    fun saveFavoriteVoicesJson(json: String) {
+        saveString("favorite_voices_json", json)
+    }
+
+    fun getFavoriteVoicesJson(): String {
+        return getString("favorite_voices_json")
+    }
+
     companion object {
         private const val PREFS_FILENAME = "myra_secure_prefs"
         private const val FALLBACK_PREFS_FILENAME = "myra_fallback_prefs"
