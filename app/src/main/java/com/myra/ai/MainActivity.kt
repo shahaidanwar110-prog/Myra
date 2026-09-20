@@ -277,7 +277,7 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.myra_logo),
+                    painter = painterResource(id = R.drawable.myra_avatar),
                     contentDescription = "Myra Splash Logo",
                     modifier = Modifier
                         .size(160.dp)

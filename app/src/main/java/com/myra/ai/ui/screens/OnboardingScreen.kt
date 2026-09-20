@@ -170,7 +170,7 @@ private fun WelcomeStepContent(onNext: () -> Unit) {
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {
             Image(
-                painter = painterResource(id = R.drawable.myra_logo),
+                painter = painterResource(id = R.drawable.myra_avatar),
                 contentDescription = "Myra Logo",
                 modifier = Modifier
                     .fillMaxSize()
