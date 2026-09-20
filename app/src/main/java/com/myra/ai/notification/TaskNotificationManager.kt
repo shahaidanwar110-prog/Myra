@@ -46,6 +46,44 @@ class TaskNotificationManager(private val context: Context) {
         }
     }
 
+    fun showAssistantOverlayNotification(description: String = "Assistant Overlay active on screen") {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopIntent = Intent(context, TaskStopReceiver::class.java).apply {
+            action = TaskStopReceiver.ACTION_STOP_TASK
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            context,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle("Myra Screen Assistant Active")
+            .setContentText(description)
+            .setSmallIcon(R.drawable.ic_myra_logo)
+            .setOngoing(true)
+            .setContentIntent(contentPendingIntent)
+            .addAction(
+                android.R.drawable.ic_delete,
+                "STOP ASSISTANT",
+                stopPendingIntent
+            )
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
     fun showTaskRunningNotification(taskDescription: String) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

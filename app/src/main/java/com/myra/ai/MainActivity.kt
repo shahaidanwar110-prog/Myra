@@ -95,6 +95,17 @@ class MainActivity : ComponentActivity() {
 
         TaskStopReceiver.onStopTaskRequested = {
             stopCurrentTask()
+            com.myra.ai.accessibility.AssistantOverlayManager.hideOverlay()
+        }
+
+        com.myra.ai.accessibility.AssistantOverlayManager.onStopOverlayRequested = {
+            stopCurrentTask()
+        }
+        com.myra.ai.accessibility.AssistantOverlayManager.onMicClickRequested = {
+            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+        com.myra.ai.accessibility.AssistantOverlayManager.onUserSubmitPrompt = { prompt ->
+            processUserPrompt(prompt)
         }
 
         setContent {
@@ -132,6 +143,11 @@ class MainActivity : ComponentActivity() {
                         voiceController.onSpeechResultListener = { spokenText ->
                             processUserPrompt(spokenText)
                         }
+                    }
+
+                    // Audio state sync for Edge Lighting Overlay
+                    LaunchedEffect(isListening, isSpeaking) {
+                        com.myra.ai.accessibility.AssistantOverlayManager.updateAudioState(isListening, isSpeaking)
                     }
 
                     if (isSplashScreenActive) {
@@ -333,6 +349,9 @@ class MainActivity : ComponentActivity() {
                 trimmedPrompt.contains("watch video", ignoreCase = true) ||
                 trimmedPrompt.contains("describe screen", ignoreCase = true) ||
                 trimmedPrompt.contains("what is on screen", ignoreCase = true) ||
+                trimmedPrompt.contains("look at my screen", ignoreCase = true) ||
+                trimmedPrompt.contains("look at screen", ignoreCase = true) ||
+                trimmedPrompt.equals("screen", ignoreCase = true) ||
                 trimmedPrompt.contains("screenshot", ignoreCase = true)
 
         if (!isSpecialTask) {
@@ -495,38 +514,55 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Handle direct screen description / screenshot analysis
+        // Handle direct screen description / screenshot analysis / assistant overlay mode
         if (trimmedPrompt.contains("describe screen", ignoreCase = true) ||
             trimmedPrompt.contains("what is on screen", ignoreCase = true) ||
+            trimmedPrompt.contains("look at my screen", ignoreCase = true) ||
+            trimmedPrompt.contains("look at screen", ignoreCase = true) ||
+            trimmedPrompt.equals("screen", ignoreCase = true) ||
             trimmedPrompt.contains("screenshot", ignoreCase = true)
         ) {
             currentTaskJob = lifecycleScope.launch {
                 isTaskRunningState.value = true
-                taskNotificationManager.showTaskRunningNotification("Analyzing screen...")
+                taskNotificationManager.showAssistantOverlayNotification("Assistant Overlay active on screen")
 
                 val service = MyraAccessibilityService.getInstance()
                 if (service == null) {
                     val errMsg = "Accessibility service is disabled. Enable Myra in Accessibility Settings."
                     chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
+                    com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $errMsg")
                     voiceController.speak(errMsg)
                 } else {
+                    // Move Myra to background and open floating orb overlay
+                    service.pressHome()
+                    service.showAssistantOverlay()
+
+                    delay(500L) // Brief pause for home transition
+
                     val bitmap = kotlin.coroutines.suspendCoroutine { continuation ->
                         service.captureScreenshot { bmp -> continuation.resume(bmp) }
                     }
                     val treeText = service.dumpNodeTreeText()
-                    val descResult = aiProviderManager.describeScreen(bitmap, treeText, "Describe what is on screen in detail and explain key elements.")
+                    val promptText = if (trimmedPrompt.equals("screen", ignoreCase = true) || trimmedPrompt.contains("look at my screen", ignoreCase = true)) {
+                        "Analyze and describe what is on screen right now and offer relevant assistance."
+                    } else {
+                        prompt
+                    }
+
+                    val descResult = aiProviderManager.describeScreen(bitmap, treeText, promptText)
                     descResult.onSuccess { desc ->
                         chatViewModel.addMessage(ChatMessage("Myra", desc, providerInfo = providerInfoStr))
+                        com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $desc")
                         voiceController.speak(desc)
                     }.onFailure { err ->
                         val errText = "Screen analysis failed: ${err.localizedMessage ?: err.message}"
                         chatViewModel.addMessage(ChatMessage("Myra", errText, isError = true, providerInfo = providerInfoStr))
+                        com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $errText")
                         voiceController.speak(errText)
                     }
                 }
 
                 isTaskRunningState.value = false
-                taskNotificationManager.clearNotification()
             }
             return
         }
@@ -631,6 +667,7 @@ class MainActivity : ComponentActivity() {
         isTaskRunningState.value = false
         watchVideoManager.stopWatching()
         MyraAccessibilityService.getInstance()?.clearGuideHighlight()
+        com.myra.ai.accessibility.AssistantOverlayManager.hideOverlay()
         taskNotificationManager.clearNotification()
         voiceController.stopListening()
         if (::agentOrchestrator.isInitialized) {

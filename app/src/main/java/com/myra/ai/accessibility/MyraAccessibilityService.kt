@@ -292,4 +292,16 @@ class MyraAccessibilityService : AccessibilityService() {
     fun clearGuideHighlight() {
         GuideOverlayManager.clearHighlight()
     }
+
+    fun showAssistantOverlay() {
+        AssistantOverlayManager.showOverlay(this)
+    }
+
+    fun hideAssistantOverlay() {
+        AssistantOverlayManager.hideOverlay()
+    }
+
+    fun updateOverlayAudioState(isListening: Boolean, isSpeaking: Boolean) {
+        AssistantOverlayManager.updateAudioState(isListening, isSpeaking)
+    }
 }
