@@ -33,6 +33,14 @@ class SecureStorage(context: Context) {
         return sharedPreferences.getString(KEY_PREFIX_API + provider, "") ?: ""
     }
 
+    fun saveGeminiModel(model: String) {
+        sharedPreferences.edit().putString(KEY_GEMINI_MODEL, model).apply()
+    }
+
+    fun getGeminiModel(): String {
+        return sharedPreferences.getString(KEY_GEMINI_MODEL, DEFAULT_GEMINI_MODEL)?.ifBlank { DEFAULT_GEMINI_MODEL } ?: DEFAULT_GEMINI_MODEL
+    }
+
     fun saveActiveProvider(provider: String) {
         sharedPreferences.edit().putString(KEY_ACTIVE_PROVIDER, provider).apply()
     }
@@ -53,11 +61,13 @@ class SecureStorage(context: Context) {
         private const val PREFS_FILENAME = "myra_secure_prefs"
         private const val FALLBACK_PREFS_FILENAME = "myra_fallback_prefs"
         private const val KEY_PREFIX_API = "api_key_"
+        private const val KEY_GEMINI_MODEL = "gemini_model"
         private const val KEY_ACTIVE_PROVIDER = "active_ai_provider"
         private const val KEY_LANGUAGE = "selected_language"
 
         const val PROVIDER_GEMINI = "Google Gemini"
         const val PROVIDER_OPENAI = "OpenAI"
         const val PROVIDER_ANTHROPIC = "Anthropic"
+        const val DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
     }
 }
