@@ -7,14 +7,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
+import com.myra.ai.ai.AiProviderManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -166,6 +171,82 @@ fun SettingsScreen(
                         onClick = { activeProvider = provider },
                         label = { Text(provider) }
                     )
+                }
+            }
+
+            val scope = rememberCoroutineScope()
+            var isTestingConnection by remember { mutableStateOf(false) }
+            var testResultMsg by remember { mutableStateOf<String?>(null) }
+            var isTestError by remember { mutableStateOf(false) }
+
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        isTestingConnection = true
+                        testResultMsg = null
+                        isTestError = false
+
+                        // Save current keys and provider to storage first so AiProviderManager reads updated config
+                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
+                        secureStorage.saveGeminiModel(geminiModel)
+                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
+                        secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
+                        secureStorage.saveActiveProvider(activeProvider)
+
+                        val providerManager = AiProviderManager(secureStorage)
+                        val res = providerManager.generateText("Hello! Respond with 'Connection Successful' if working.")
+                        isTestingConnection = false
+                        res.onSuccess { text ->
+                            isTestError = false
+                            testResultMsg = "Success ($activeProvider): ${text.trim()}"
+                        }.onFailure { err ->
+                            isTestError = true
+                            testResultMsg = "Connection Error ($activeProvider): ${err.localizedMessage ?: err.message}"
+                        }
+                    }
+                },
+                enabled = !isTestingConnection,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isTestingConnection) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Testing Connection...")
+                } else {
+                    Icon(Icons.Default.Radio, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Test Connection ($activeProvider)")
+                }
+            }
+
+            testResultMsg?.let { msg ->
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isTestError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isTestError) Icons.Default.Error else Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (isTestError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isTestError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
 
