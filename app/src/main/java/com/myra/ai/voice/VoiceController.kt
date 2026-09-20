@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
+data class VoiceInfo(
+    val name: String,
+    val localeTag: String,
+    val language: String
+)
+
 class VoiceController(
     private val context: Context,
     private val secureStorage: SecureStorage
@@ -130,6 +136,48 @@ class VoiceController(
         }
     }
 
+    fun getAvailableVoices(): List<VoiceInfo> {
+        if (!isTtsReady) return emptyList()
+        val voices = textToSpeech?.voices ?: return emptyList()
+        return voices.map { voice ->
+            val lang = voice.locale?.language ?: "en"
+            VoiceInfo(
+                name = voice.name,
+                localeTag = voice.locale?.toLanguageTag() ?: "en-US",
+                language = lang
+            )
+        }
+    }
+
+    fun applyTtsSettings() {
+        if (!isTtsReady) return
+        val pitch = secureStorage.getPitch()
+        val rate = secureStorage.getSpeechRate()
+        val selectedVoiceName = secureStorage.getSelectedVoice()
+
+        textToSpeech?.setPitch(pitch)
+        textToSpeech?.setSpeechRate(rate)
+
+        if (selectedVoiceName.isNotBlank()) {
+            val voice = textToSpeech?.voices?.find { it.name == selectedVoiceName }
+            if (voice != null) {
+                textToSpeech?.voice = voice
+            }
+        }
+    }
+
+    fun previewVoice(voiceName: String, sampleText: String, pitch: Float, rate: Float) {
+        if (!isTtsReady) return
+        textToSpeech?.setPitch(pitch)
+        textToSpeech?.setSpeechRate(rate)
+        val voice = textToSpeech?.voices?.find { it.name == voiceName }
+        if (voice != null) {
+            textToSpeech?.voice = voice
+        }
+        val utteranceId = "myra_preview_${System.currentTimeMillis()}"
+        textToSpeech?.speak(sampleText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+
     fun updateTtsLanguage() {
         if (!isTtsReady) return
         val langTag = secureStorage.getLanguage()
@@ -139,11 +187,13 @@ class VoiceController(
             else -> Locale.US
         }
         textToSpeech?.language = locale
+        applyTtsSettings()
     }
 
     fun speak(text: String) {
         if (!isTtsReady) return
         updateTtsLanguage()
+        applyTtsSettings()
         val utteranceId = "myra_tts_${System.currentTimeMillis()}"
         textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
