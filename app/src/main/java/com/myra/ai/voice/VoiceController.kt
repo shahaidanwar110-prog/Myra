@@ -37,7 +37,19 @@ class VoiceController(
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    var isLiveMode: Boolean = false
+        private set
+
     var onSpeechResultListener: ((String) -> Unit)? = null
+
+    fun setLiveMode(enabled: Boolean) {
+        isLiveMode = enabled
+        if (!enabled) {
+            stopListening()
+            stopSpeaking()
+        }
+    }
 
     init {
         initSpeechRecognizer()
@@ -62,6 +74,11 @@ class VoiceController(
 
                     override fun onError(error: Int) {
                         _isListening.value = false
+                        if (isLiveMode) {
+                            mainHandler.postDelayed({
+                                if (isLiveMode) startListening()
+                            }, 1000L)
+                        }
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -125,6 +142,11 @@ class VoiceController(
 
                 override fun onDone(utteranceId: String?) {
                     _isSpeaking.value = false
+                    if (isLiveMode) {
+                        mainHandler.postDelayed({
+                            if (isLiveMode) startListening()
+                        }, 400L)
+                    }
                 }
 
                 @Deprecated("Deprecated in Java")

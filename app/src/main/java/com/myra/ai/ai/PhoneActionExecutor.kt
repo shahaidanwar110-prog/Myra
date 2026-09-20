@@ -204,57 +204,79 @@ object PhoneActionExecutor {
         )
     }
 
-    suspend fun executeAction(action: SystemAction, phoneControlManager: PhoneControlManager): Result<String> {
-        return when (action.type) {
-            ActionType.OPEN_APP -> {
-                val appName = action.target ?: return Result.failure(Exception("App name not specified."))
-                phoneControlManager.openAppByName(appName)
+    suspend fun executeAction(
+        action: SystemAction,
+        phoneControlManager: PhoneControlManager,
+        maxRetries: Int = 2
+    ): Result<String> {
+        // Direct intent optimization: YouTube Search
+        if (action.type == ActionType.OPEN_APP && action.target.equals("YouTube", ignoreCase = true) && !action.textToType.isNullOrBlank()) {
+            return phoneControlManager.openYouTubeSearchByIntent(action.textToType)
+        }
+
+        var attempt = 0
+        var lastException: Exception? = null
+
+        while (attempt <= maxRetries) {
+            val result = when (action.type) {
+                ActionType.OPEN_APP -> {
+                    val appName = action.target ?: return Result.failure(Exception("App name not specified."))
+                    phoneControlManager.openAppByName(appName)
+                }
+                ActionType.OPEN_SETTINGS -> phoneControlManager.openSettings()
+                ActionType.OPEN_CAMERA -> phoneControlManager.openCamera()
+                ActionType.OPEN_BROWSER -> phoneControlManager.openBrowser(action.target)
+                ActionType.OPEN_CONTACTS -> phoneControlManager.openContacts()
+                ActionType.PRESS_HOME -> phoneControlManager.pressHome()
+                ActionType.PRESS_BACK -> phoneControlManager.pressBack()
+                ActionType.PRESS_RECENTS -> phoneControlManager.pressRecents()
+                ActionType.SCROLL_UP -> phoneControlManager.scrollUp()
+                ActionType.SCROLL_DOWN -> phoneControlManager.scrollDown()
+                ActionType.CLICK_TEXT -> {
+                    val targetText = action.target ?: return Result.failure(Exception("Target text for click not specified."))
+                    phoneControlManager.clickText(targetText)
+                }
+                ActionType.TYPE_TEXT -> {
+                    val text = action.textToType ?: action.target ?: return Result.failure(Exception("Text to type not specified."))
+                    phoneControlManager.typeText(text)
+                }
+                ActionType.CALL -> {
+                    val recipient = action.recipient ?: action.target ?: return Result.failure(Exception("Recipient not specified for call."))
+                    phoneControlManager.makeCall(recipient)
+                }
+                ActionType.SEND_SMS -> {
+                    val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for SMS."))
+                    val text = action.textToType ?: action.target ?: ""
+                    phoneControlManager.sendSms(recipient, text)
+                }
+                ActionType.WHATSAPP -> {
+                    val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for WhatsApp."))
+                    val text = action.textToType ?: action.target ?: ""
+                    phoneControlManager.openWhatsAppAndSend(recipient, text)
+                }
+                ActionType.POST_SOCIAL_MEDIA -> {
+                    val plat = action.platform ?: action.target ?: "Social App"
+                    val fullCaption = "${action.caption ?: ""} ${action.hashtags ?: ""}".trim()
+                    phoneControlManager.postToSocialPlatform(plat, fullCaption)
+                }
+                ActionType.MULTI_STEP -> Result.success(action.message ?: "Starting multi-step task...")
+                ActionType.CHAT_RESPONSE -> Result.success(action.message ?: "")
+                ActionType.ASSISTANT_OVERLAY -> Result.success(action.message ?: "Starting Assistant Overlay...")
             }
-            ActionType.OPEN_SETTINGS -> phoneControlManager.openSettings()
-            ActionType.OPEN_CAMERA -> phoneControlManager.openCamera()
-            ActionType.OPEN_BROWSER -> phoneControlManager.openBrowser(action.target)
-            ActionType.OPEN_CONTACTS -> phoneControlManager.openContacts()
-            ActionType.PRESS_HOME -> phoneControlManager.pressHome()
-            ActionType.PRESS_BACK -> phoneControlManager.pressBack()
-            ActionType.PRESS_RECENTS -> phoneControlManager.pressRecents()
-            ActionType.SCROLL_UP -> phoneControlManager.scrollUp()
-            ActionType.SCROLL_DOWN -> phoneControlManager.scrollDown()
-            ActionType.CLICK_TEXT -> {
-                val targetText = action.target ?: return Result.failure(Exception("Target text for click not specified."))
-                phoneControlManager.clickText(targetText)
-            }
-            ActionType.TYPE_TEXT -> {
-                val text = action.textToType ?: action.target ?: return Result.failure(Exception("Text to type not specified."))
-                phoneControlManager.typeText(text)
-            }
-            ActionType.CALL -> {
-                val recipient = action.recipient ?: action.target ?: return Result.failure(Exception("Recipient not specified for call."))
-                phoneControlManager.makeCall(recipient)
-            }
-            ActionType.SEND_SMS -> {
-                val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for SMS."))
-                val text = action.textToType ?: action.target ?: ""
-                phoneControlManager.sendSms(recipient, text)
-            }
-            ActionType.WHATSAPP -> {
-                val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for WhatsApp."))
-                val text = action.textToType ?: action.target ?: ""
-                phoneControlManager.openWhatsAppAndSend(recipient, text)
-            }
-            ActionType.POST_SOCIAL_MEDIA -> {
-                val plat = action.platform ?: action.target ?: "Social App"
-                val fullCaption = "${action.caption ?: ""} ${action.hashtags ?: ""}".trim()
-                phoneControlManager.postToSocialPlatform(plat, fullCaption)
-            }
-            ActionType.MULTI_STEP -> {
-                Result.success(action.message ?: "Starting multi-step task...")
-            }
-            ActionType.CHAT_RESPONSE -> {
-                Result.success(action.message ?: "")
-            }
-            ActionType.ASSISTANT_OVERLAY -> {
-                Result.success(action.message ?: "Starting Assistant Overlay...")
+
+            if (result.isSuccess) {
+                return result
+            } else {
+                lastException = result.exceptionOrNull() as? Exception
+                attempt++
+                if (attempt <= maxRetries) {
+                    kotlinx.coroutines.delay(1200L)
+                }
             }
         }
+
+        val targetInfo = action.target ?: action.recipient ?: action.textToType ?: "N/A"
+        val failReason = lastException?.localizedMessage ?: lastException?.message ?: "Element or screen state not ready after 2 retries"
+        return Result.failure(Exception("Action '${action.type.name}' on target '$targetInfo' failed after 2 retries. Reason: $failReason"))
     }
 }

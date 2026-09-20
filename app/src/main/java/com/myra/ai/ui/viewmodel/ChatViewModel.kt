@@ -21,7 +21,8 @@ class ChatViewModel(
     private val secureStorage: SecureStorage,
     private val aiProviderManager: AiProviderManager,
     private val phoneControlManager: PhoneControlManager? = null,
-    private val voiceController: VoiceController? = null
+    private val voiceController: VoiceController? = null,
+    private val appDatabase: com.myra.ai.data.db.AppDatabase? = null
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -78,7 +79,8 @@ class ChatViewModel(
         _isThinking.value = true
         val providerInfoStr = getProviderInfo()
 
-        val result = aiProviderManager.generateText(trimmedPrompt, PhoneActionExecutor.SYSTEM_PROMPT)
+        val systemPrompt = com.myra.ai.ai.PersonalityPromptBuilder.buildSystemPrompt(secureStorage)
+        val result = aiProviderManager.generateText(trimmedPrompt, systemPrompt)
 
         _isThinking.value = false
 
@@ -152,7 +154,24 @@ class ChatViewModel(
             }
         }
 
-        val execResult = PhoneActionExecutor.executeAction(action, phoneControlManager)
+        val targetStr = action.target ?: action.recipient ?: action.textToType ?: "N/A"
+        val execResult = PhoneActionExecutor.executeAction(action, phoneControlManager, maxRetries = 2)
+
+        val isSuccess = execResult.isSuccess
+        val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
+        val failureReason = if (isSuccess) null else execResult.exceptionOrNull()?.localizedMessage
+
+        appDatabase?.taskDao()?.insertStepLog(
+            com.myra.ai.data.db.TaskStepEntity(
+                stepIndex = 1,
+                action = action.type.name,
+                target = targetStr,
+                status = if (isSuccess) "SUCCESS" else "FAILED",
+                resultMessage = resultMsg,
+                failureReason = failureReason
+            )
+        )
+
         execResult.fold(
             onSuccess = { resultMessage ->
                 addMessage(ChatMessage(sender = "Myra", text = resultMessage, providerInfo = providerInfo))
@@ -160,10 +179,11 @@ class ChatViewModel(
             },
             onFailure = { err ->
                 val errorMsg = err.localizedMessage ?: err.message ?: "Action execution failed."
+                val fullErrMsg = "Step Failed (${action.type.name}): $errorMsg"
                 addMessage(
                     ChatMessage(
                         sender = "Myra",
-                        text = "Error: $errorMsg",
+                        text = fullErrMsg,
                         isError = true,
                         providerInfo = providerInfo
                     )
@@ -185,11 +205,28 @@ class ChatViewModel(
             addMessage(ChatMessage(sender = "Myra", text = "Step $stepNum/$total: $stepDesc", providerInfo = providerInfo))
 
             val pcm = phoneControlManager ?: break
-            val execResult = PhoneActionExecutor.executeAction(step, pcm)
-            if (execResult.isFailure) {
-                val failMsg = "Multi-step task stopped at step $stepNum of $total."
-                addMessage(ChatMessage(sender = "Myra", text = failMsg, isError = true, providerInfo = providerInfo))
-                voiceController?.speak(failMsg)
+            val targetStr = step.target ?: step.recipient ?: step.textToType ?: "N/A"
+            val execResult = PhoneActionExecutor.executeAction(step, pcm, maxRetries = 2)
+
+            val isSuccess = execResult.isSuccess
+            val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
+            val failureReason = if (isSuccess) null else execResult.exceptionOrNull()?.localizedMessage
+
+            appDatabase?.taskDao()?.insertStepLog(
+                com.myra.ai.data.db.TaskStepEntity(
+                    stepIndex = stepNum,
+                    action = step.type.name,
+                    target = targetStr,
+                    status = if (isSuccess) "SUCCESS" else "FAILED",
+                    resultMessage = resultMsg,
+                    failureReason = failureReason
+                )
+            )
+
+            if (!isSuccess) {
+                val failReport = "Multi-step task stopped at step $stepNum of $total (${step.type.name}). Failure reason: ${failureReason ?: "Unknown error"}"
+                addMessage(ChatMessage(sender = "Myra", text = failReport, isError = true, providerInfo = providerInfo))
+                voiceController?.speak("Step $stepNum failed. $resultMsg")
                 return
             }
 

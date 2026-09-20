@@ -134,6 +134,7 @@ fun MainAppStructure(
                     Triple("home", "Home", Icons.Default.Home),
                     Triple("chat", "Chat", Icons.AutoMirrored.Filled.Comment),
                     Triple("agents", "Agents", Icons.Default.SmartToy),
+                    Triple("task_log", "Task Log", Icons.Default.History),
                     Triple("code_mode", "Website / Coding", Icons.Default.Code),
                     Triple("guide", "Guide Mode", Icons.Default.CompassCalibration),
                     Triple("settings", "Settings", Icons.Default.Settings),
@@ -195,6 +196,7 @@ fun MainAppStructure(
                             when (currentScreen) {
                                 "chat" -> "Chat with Myra"
                                 "agents" -> "Agent Orchestrator"
+                                "task_log" -> "Task Execution Log"
                                 "code_mode" -> "Website & App Coder"
                                 "settings" -> "Settings"
                                 "permissions" -> "Permissions"

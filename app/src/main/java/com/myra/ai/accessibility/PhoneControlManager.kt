@@ -279,17 +279,55 @@ class PhoneControlManager(private val context: Context) {
         }
     }
 
-    fun clickText(targetText: String): Result<String> {
+    fun openYouTubeSearchByIntent(query: String): Result<String> {
+        return try {
+            val intent = Intent(Intent.ACTION_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra("query", query)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                Result.success("Searched YouTube for '$query' via Intent.")
+            } else {
+                val webUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+                val webIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+                Result.success("Searched YouTube web for '$query'.")
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed YouTube search: ${e.localizedMessage}"))
+        }
+    }
+
+    suspend fun clickText(targetText: String): Result<String> {
         if (targetText.isBlank()) {
             return Result.failure(Exception("Target text for click cannot be empty."))
         }
         val service = MyraAccessibilityService.getInstance()
             ?: return Result.failure(Exception("Accessibility service is disabled. Enable Myra in Accessibility Settings."))
-        return if (service.clickText(targetText)) {
-            Result.success("Clicked '$targetText'.")
-        } else {
-            Result.failure(Exception("Button or text '$targetText' not visible on screen."))
+
+        if (service.clickText(targetText)) {
+            return Result.success("Clicked '$targetText'.")
         }
+
+        // Auto-scroll down and try finding element
+        service.scrollDown()
+        kotlinx.coroutines.delay(600L)
+        if (service.clickText(targetText)) {
+            return Result.success("Scrolled and clicked '$targetText'.")
+        }
+
+        // Auto-scroll up and try finding element
+        service.scrollUp()
+        kotlinx.coroutines.delay(600L)
+        if (service.clickText(targetText)) {
+            return Result.success("Scrolled up and clicked '$targetText'.")
+        }
+
+        return Result.failure(Exception("Button or text '$targetText' not found or visible on screen after scrolling."))
     }
 
     fun typeText(textToType: String): Result<String> {
