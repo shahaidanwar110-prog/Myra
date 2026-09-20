@@ -1,169 +1,212 @@
 package com.myra.ai.ui.screens
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.myra.ai.R
+
+data class ChatMessage(
+    val sender: String, // "User" or "Myra"
+    val text: String,
+    val isError: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    isListening: Boolean,
+    isSpeaking: Boolean,
+    onStartListening: () -> Unit,
+    onStopListening: () -> Unit,
+    onSendMessage: (String) -> Unit,
+    onOpenSettings: () -> Unit,
+    chatMessages: List<ChatMessage>
+) {
     var textInput by remember { mutableStateOf("") }
-    var statusText by remember { mutableStateOf("Ready") }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_myra_logo),
                             contentDescription = "Myra Logo",
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         )
-                        Spacer(modifier = Modifier.size(12.dp))
                         Text(
-                            text = "Myra AI",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
+                            "Myra AI",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
             )
         }
-    ) { paddingValues ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(innerPadding)
+                .padding(16.dp)
         ) {
-            // Header / Logo display section
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 32.dp)
+            // Chat Messages List
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_myra_logo),
-                    contentDescription = "Myra Logo Large",
-                    modifier = Modifier.size(120.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "How can Myra help you today?",
-                    style = MaterialTheme.typography.headlineSmall,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Status: $statusText",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Big Microphone Button section
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(
-                    onClick = {
-                        statusText = "Listening..."
-                    },
-                    modifier = Modifier.size(96.dp),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Microphone Button",
-                        modifier = Modifier.size(48.dp)
-                    )
+                items(chatMessages) { msg ->
+                    ChatMessageItem(msg)
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Tap to speak",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
             }
 
-            // Text Input section
-            Row(
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Big Microphone Button & Voice Status
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val micGradient = if (isListening) {
+                    listOf(Color(0xFFFF5252), Color(0xFFFF1744))
+                } else {
+                    listOf(Color(0xFF7C4DFF), Color(0xFF18FFFF))
+                }
+
+                IconButton(
+                    onClick = {
+                        if (isListening) onStopListening() else onStartListening()
+                    },
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(micGradient))
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = "Voice Command",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+
+            if (isListening) {
+                Text(
+                    "Listening... (Urdu, Hindi, English)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else if (isSpeaking) {
+                Text(
+                    "Myra is speaking...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Text Input Command Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
                     value = textInput,
                     onValueChange = { textInput = it },
-                    placeholder = { Text("Type a command...") },
+                    placeholder = { Text("Ask Myra anything...") },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+
                 IconButton(
                     onClick = {
                         if (textInput.isNotBlank()) {
-                            statusText = "Processing: $textInput"
+                            onSendMessage(textInput)
                             textInput = ""
                         }
-                    }
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send Command",
-                        tint = MaterialTheme.colorScheme.primary
+                        contentDescription = "Send",
+                        tint = Color.White
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatMessageItem(msg: ChatMessage) {
+    val isUser = msg.sender == "User"
+    val alignment = if (isUser) Alignment.End else Alignment.Start
+    val bgColor = when {
+        isUser -> MaterialTheme.colorScheme.primaryContainer
+        msg.isError -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = alignment
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = bgColor),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.widthIn(max = 280.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = msg.sender,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = msg.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
