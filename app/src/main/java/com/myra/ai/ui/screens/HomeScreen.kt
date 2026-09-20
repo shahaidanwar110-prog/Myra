@@ -469,8 +469,9 @@ fun HomeTabContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         val quickActions = listOf(
+            Triple("Screen", "look at my screen", Icons.Default.PhoneAndroid),
             Triple("Open app", "Open YouTube", Icons.Default.Apps),
-            Triple("Message", "Send WhatsApp message to John: Hello!", Icons.Default.Message),
+            Triple("Message", "Send WhatsApp message to John: Hello!", Icons.AutoMirrored.Filled.Comment),
             Triple("Call", "Call Mum", Icons.Default.Phone),
             Triple("Watch screen", "Watch video on screen", Icons.Default.Visibility),
             Triple("Guide me", "Guide me to settings", Icons.Default.Explore),

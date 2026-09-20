@@ -8,6 +8,14 @@ object CommandParser {
 
         val lower = trimmed.lowercase()
 
+        // 0. Screen / Assistant Overlay
+        if (isScreenCommand(trimmed, lower)) {
+            return SystemAction(
+                type = ActionType.ASSISTANT_OVERLAY,
+                message = "Starting Screen Assistant Overlay..."
+            )
+        }
+
         // 1. Home
         if (isHomeCommand(trimmed, lower)) {
             return SystemAction(
@@ -41,6 +49,19 @@ object CommandParser {
         if (openAction != null) return openAction
 
         return null
+    }
+
+    private fun isScreenCommand(original: String, lower: String): Boolean {
+        val exactMatches = setOf(
+            "screen", "look at my screen", "hey myra, look at my screen", "hey myra look at my screen",
+            "look at screen", "watch screen", "screen mode", "look screen", "my screen",
+            "میری اسکرین دیکھو", "اسکرین دیکھو", "मेरी स्क्रीन देखो", "स्क्रीन देखो"
+        )
+        if (lower in exactMatches || original in exactMatches) return true
+
+        if (lower.contains("look at my screen") || lower.contains("look at screen") || lower.contains("watch screen")) return true
+        if (original.contains("اسکرین دیکھو") || original.contains("स्क्रीन देखो")) return true
+        return false
     }
 
     private fun isHomeCommand(original: String, lower: String): Boolean {

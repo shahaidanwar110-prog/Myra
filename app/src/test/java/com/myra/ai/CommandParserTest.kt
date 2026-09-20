@@ -115,6 +115,25 @@ class CommandParserTest {
     }
 
     @Test
+    fun testScreenAssistantCommands() {
+        val cmd1 = CommandParser.parseCommand("look at my screen")
+        assertNotNull(cmd1)
+        assertEquals(ActionType.ASSISTANT_OVERLAY, cmd1?.type)
+
+        val cmd2 = CommandParser.parseCommand("Hey Myra, look at my screen")
+        assertNotNull(cmd2)
+        assertEquals(ActionType.ASSISTANT_OVERLAY, cmd2?.type)
+
+        val cmd3 = CommandParser.parseCommand("screen")
+        assertNotNull(cmd3)
+        assertEquals(ActionType.ASSISTANT_OVERLAY, cmd3?.type)
+
+        val cmdUr = CommandParser.parseCommand("میری اسکرین دیکھو")
+        assertNotNull(cmdUr)
+        assertEquals(ActionType.ASSISTANT_OVERLAY, cmdUr?.type)
+    }
+
+    @Test
     fun testComplexQueriesReturnNullForAiFallback() {
         val complex = CommandParser.parseCommand("What is the weather in Tokyo today?")
         assertNull(complex)

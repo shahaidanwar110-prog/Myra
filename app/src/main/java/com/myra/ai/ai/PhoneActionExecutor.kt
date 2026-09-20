@@ -20,7 +20,8 @@ enum class ActionType {
     WHATSAPP,
     POST_SOCIAL_MEDIA,
     MULTI_STEP,
-    CHAT_RESPONSE
+    CHAT_RESPONSE,
+    ASSISTANT_OVERLAY
 }
 
 data class SystemAction(
@@ -250,6 +251,9 @@ object PhoneActionExecutor {
             }
             ActionType.CHAT_RESPONSE -> {
                 Result.success(action.message ?: "")
+            }
+            ActionType.ASSISTANT_OVERLAY -> {
+                Result.success(action.message ?: "Starting Assistant Overlay...")
             }
         }
     }
