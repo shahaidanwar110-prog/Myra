@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Myra</string>
+    <string name="accessibility_service_description">Myra Accessibility Service enables voice and text phone automation like opening apps, clicking buttons, scrolling, and entering text.</string>
 </resources>

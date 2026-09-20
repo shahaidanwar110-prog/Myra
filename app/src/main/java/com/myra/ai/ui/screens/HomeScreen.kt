@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.myra.ai.R
 
@@ -34,8 +36,10 @@ data class ChatMessage(
 fun HomeScreen(
     isListening: Boolean,
     isSpeaking: Boolean,
+    isTaskRunning: Boolean = false,
     onStartListening: () -> Unit,
     onStopListening: () -> Unit,
+    onStopTask: () -> Unit = {},
     onSendMessage: (String) -> Unit,
     onOpenSettings: () -> Unit,
     chatMessages: List<ChatMessage>
@@ -76,6 +80,33 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            // Big Stop Task Button when task is running
+            if (isTaskRunning) {
+                Button(
+                    onClick = onStopTask,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = "Stop Task",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "STOP TASK IMMEDIATELY",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
             // Chat Messages List
             LazyColumn(
                 modifier = Modifier
