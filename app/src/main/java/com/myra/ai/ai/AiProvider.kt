@@ -59,6 +59,8 @@ internal fun executeSingleHttpPost(
 
         if (statusCode in 200..299) {
             return Pair(statusCode, Result.success(response))
+        } else if (statusCode == 429) {
+            return Pair(statusCode, Result.failure(Exception("HTTP 429: Daily free quota is finished. Please switch to another configured provider in Settings.")))
         } else {
             val reason = if (response.isNotBlank()) {
                 try {
@@ -93,7 +95,7 @@ internal suspend fun httpPostRequest(
         if (result.isSuccess) {
             return@withContext result
         }
-        if ((statusCode == 503 || statusCode == 429) && attempts < maxRetries) {
+        if (statusCode == 503 && attempts < maxRetries) {
             attempts++
             kotlinx.coroutines.delay(delayMs)
         } else {
