@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,7 +19,8 @@ import com.myra.ai.data.SecureStorage
 @Composable
 fun SettingsScreen(
     secureStorage: SecureStorage,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenPermissions: () -> Unit = {}
 ) {
     var geminiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)) }
     var geminiModel by remember { mutableStateOf(secureStorage.getGeminiModel()) }
@@ -48,6 +50,17 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            OutlinedButton(
+                onClick = onOpenPermissions,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Security, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Permissions & Accessibility Setup")
+            }
+
+            HorizontalDivider()
+
             Text("API Keys (Encrypted)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
             OutlinedTextField(
