@@ -1,9 +1,14 @@
 package com.myra.ai.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.util.concurrent.Executors
 
 class MyraAccessibilityService : AccessibilityService() {
 
@@ -180,5 +185,111 @@ class MyraAccessibilityService : AccessibilityService() {
         }
         rootNode.recycle()
         return result
+    }
+
+    fun captureScreenshot(callback: (Bitmap?) -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val executor = mainExecutor ?: Executors.newSingleThreadExecutor()
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                executor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        try {
+                            val hardwareBuffer = screenshot.hardwareBuffer
+                            val colorSpace = screenshot.colorSpace
+                            val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            val swBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                            hardwareBuffer.close()
+                            callback(swBitmap ?: bitmap)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            callback(null)
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        callback(null)
+                    }
+                }
+            )
+        } else {
+            callback(null)
+        }
+    }
+
+    fun dumpNodeTreeText(): String {
+        val rootNode = rootInActiveWindow ?: return "Screen tree unavailable (root node null)."
+        val sb = StringBuilder()
+        traverseAndDumpNode(rootNode, sb, 0)
+        rootNode.recycle()
+        return if (sb.isNotEmpty()) sb.toString() else "Empty screen tree."
+    }
+
+    private fun traverseAndDumpNode(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int) {
+        val indent = "  ".repeat(depth)
+        val text = node.text?.toString()?.trim()
+        val desc = node.contentDescription?.toString()?.trim()
+        val viewId = node.viewIdResourceName
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+
+        val labels = mutableListOf<String>()
+        if (!text.isNullOrEmpty()) labels.add("text=\"$text\"")
+        if (!desc.isNullOrEmpty()) labels.add("desc=\"$desc\"")
+        if (!viewId.isNullOrEmpty()) labels.add("id=\"$viewId\"")
+        if (node.isClickable) labels.add("clickable=true")
+        if (node.isEditable) labels.add("editable=true")
+        labels.add("bounds=[${bounds.left},${bounds.top}][${bounds.right},${bounds.bottom}]")
+
+        if (labels.isNotEmpty()) {
+            sb.append(indent).append("- ").append(labels.joinToString(", ")).append("\n")
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            traverseAndDumpNode(child, sb, depth + 1)
+            child.recycle()
+        }
+    }
+
+    fun findNodeBounds(targetText: String): Rect? {
+        val rootNode = rootInActiveWindow ?: return null
+        val bounds = Rect()
+        val found = findNodeByTextInternal(rootNode, targetText, bounds)
+        rootNode.recycle()
+        return if (found) bounds else null
+    }
+
+    private fun findNodeByTextInternal(node: AccessibilityNodeInfo, targetText: String, outBounds: Rect): Boolean {
+        val text = node.text?.toString() ?: node.contentDescription?.toString()
+        if (text != null && text.contains(targetText, ignoreCase = true)) {
+            node.getBoundsInScreen(outBounds)
+            return true
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (findNodeByTextInternal(child, targetText, outBounds)) {
+                child.recycle()
+                return true
+            }
+            child.recycle()
+        }
+        return false
+    }
+
+    fun showGuideHighlight(targetText: String, instruction: String): Boolean {
+        val bounds = findNodeBounds(targetText)
+        return if (bounds != null && !bounds.isEmpty) {
+            GuideOverlayManager.showHighlight(this, bounds, instruction)
+            true
+        } else {
+            GuideOverlayManager.clearHighlight()
+            false
+        }
+    }
+
+    fun clearGuideHighlight() {
+        GuideOverlayManager.clearHighlight()
     }
 }

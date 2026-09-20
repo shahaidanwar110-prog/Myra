@@ -11,9 +11,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.myra.ai.accessibility.MyraAccessibilityService
 import com.myra.ai.accessibility.PhoneControlManager
 import com.myra.ai.ai.AiProviderManager
 import com.myra.ai.ai.PhoneActionExecutor
+import com.myra.ai.ai.WatchVideoManager
 import com.myra.ai.data.SecureStorage
 import com.myra.ai.notification.TaskNotificationManager
 import com.myra.ai.notification.TaskStopReceiver
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var aiProviderManager: AiProviderManager
     private lateinit var phoneControlManager: PhoneControlManager
     private lateinit var taskNotificationManager: TaskNotificationManager
+    private lateinit var watchVideoManager: WatchVideoManager
 
     private var currentTaskJob: Job? = null
     private var isTaskRunningState = mutableStateOf(false)
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
         aiProviderManager = AiProviderManager(secureStorage)
         phoneControlManager = PhoneControlManager(this)
         taskNotificationManager = TaskNotificationManager(this)
+        watchVideoManager = WatchVideoManager(aiProviderManager)
 
         TaskStopReceiver.onStopTaskRequested = {
             stopCurrentTask()
@@ -75,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     val isListening by voiceController.isListening.collectAsState()
                     val isSpeaking by voiceController.isSpeaking.collectAsState()
                     val isTaskRunning by remember { isTaskRunningState }
+                    val isWatchingVideo by watchVideoManager.isWatching.collectAsState()
                     val pendingConfirmation by remember { pendingConfirmationState }
 
                     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
@@ -105,11 +110,13 @@ class MainActivity : ComponentActivity() {
                                 isListening = isListening,
                                 isSpeaking = isSpeaking,
                                 isTaskRunning = isTaskRunning,
+                                isWatchingVideo = isWatchingVideo,
                                 onStartListening = {
                                     requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 },
                                 onStopListening = { voiceController.stopListening() },
                                 onStopTask = { stopCurrentTask() },
+                                onStopWatching = { watchVideoManager.stopWatching() },
                                 onSendMessage = { text ->
                                     chatMessages.add(ChatMessage("User", text))
                                     processUserPrompt(text, chatMessages)
@@ -128,6 +135,133 @@ class MainActivity : ComponentActivity() {
     private fun processUserPrompt(prompt: String, chatMessages: MutableList<ChatMessage>) {
         currentTaskJob?.cancel()
         pendingConfirmationState.value = null
+
+        val trimmedPrompt = prompt.trim()
+
+        // Handle direct stop command
+        if (trimmedPrompt.equals("stop", ignoreCase = true)) {
+            stopCurrentTask()
+            MyraAccessibilityService.getInstance()?.clearGuideHighlight()
+            chatMessages.add(ChatMessage("Myra", "Task, video watching and guide overlay stopped."))
+            voiceController.speak("Task stopped.")
+            return
+        }
+
+        // Handle Guide mode ("guide me to...", "show me where to tap")
+        if (trimmedPrompt.contains("guide", ignoreCase = true) ||
+            trimmedPrompt.contains("show me where to tap", ignoreCase = true) ||
+            trimmedPrompt.contains("where to click", ignoreCase = true)
+        ) {
+            currentTaskJob = lifecycleScope.launch {
+                isTaskRunningState.value = true
+                taskNotificationManager.showTaskRunningNotification("Analyzing screen for Guide Mode...")
+
+                val service = MyraAccessibilityService.getInstance()
+                if (service == null) {
+                    val errMsg = "Accessibility service is disabled. Enable Myra in Accessibility Settings."
+                    chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                    voiceController.speak(errMsg)
+                } else {
+                    val bitmap = kotlin.coroutines.suspendCoroutine { continuation ->
+                        service.captureScreenshot { bmp -> continuation.resume(bmp) }
+                    }
+                    val treeText = service.dumpNodeTreeText()
+                    val guideSystemPrompt = """
+                        You are Myra in Guide Mode ("show me where to tap").
+                        Identify the single target element on screen that the user should tap next to fulfill their request: "$prompt".
+                        Respond in this exact format:
+                        TARGET: <exact element text or description on screen>
+                        INSTRUCTION: <short spoken/written instruction, e.g. "Yahan click karo">
+                    """.trimIndent()
+
+                    val guideResult = aiProviderManager.describeScreen(bitmap, treeText, guideSystemPrompt)
+                    guideResult.onSuccess { responseText ->
+                        var targetText = ""
+                        var instruction = responseText
+
+                        val lines = responseText.lines()
+                        for (line in lines) {
+                            if (line.startsWith("TARGET:", ignoreCase = true)) {
+                                targetText = line.substringAfter(":").trim()
+                            } else if (line.startsWith("INSTRUCTION:", ignoreCase = true)) {
+                                instruction = line.substringAfter(":").trim()
+                            }
+                        }
+
+                        if (targetText.isBlank()) {
+                            targetText = prompt.replace("guide me to", "", ignoreCase = true).trim()
+                        }
+
+                        val highlighted = service.showGuideHighlight(targetText, instruction)
+                        if (highlighted) {
+                            val msgText = "Guide: $instruction (Marked '$targetText')"
+                            chatMessages.add(ChatMessage("Myra", msgText))
+                            voiceController.speak(instruction)
+                        } else {
+                            val msgText = "Could not locate '$targetText' on screen to mark. Instruction: $instruction"
+                            chatMessages.add(ChatMessage("Myra", msgText))
+                            voiceController.speak(instruction)
+                        }
+                    }.onFailure { err ->
+                        val errText = "Guide mode failed: ${err.localizedMessage ?: err.message}"
+                        chatMessages.add(ChatMessage("Myra", errText, isError = true))
+                        voiceController.speak(errText)
+                    }
+                }
+
+                isTaskRunningState.value = false
+                taskNotificationManager.clearNotification()
+            }
+            return
+        }
+
+        // Handle "Watch video" mode command
+        if (trimmedPrompt.contains("watch video", ignoreCase = true) || trimmedPrompt.contains("watch this video", ignoreCase = true)) {
+            chatMessages.add(ChatMessage("Myra", "Started Watch Video mode. Myra is watching your screen..."))
+            voiceController.speak("Started Watch Video mode. Myra is watching your screen.")
+            watchVideoManager.startWatching(lifecycleScope) { summary ->
+                chatMessages.add(ChatMessage("Myra", summary))
+                voiceController.speak(summary)
+            }
+            return
+        }
+
+        // Handle direct screen description / screenshot analysis
+        if (trimmedPrompt.contains("describe screen", ignoreCase = true) ||
+            trimmedPrompt.contains("what is on screen", ignoreCase = true) ||
+            trimmedPrompt.contains("screenshot", ignoreCase = true)
+        ) {
+            currentTaskJob = lifecycleScope.launch {
+                isTaskRunningState.value = true
+                taskNotificationManager.showTaskRunningNotification("Analyzing screen...")
+
+                val service = MyraAccessibilityService.getInstance()
+                if (service == null) {
+                    val errMsg = "Accessibility service is disabled. Enable Myra in Accessibility Settings."
+                    chatMessages.add(ChatMessage("Myra", errMsg, isError = true))
+                    voiceController.speak(errMsg)
+                } else {
+                    val bitmap = kotlin.coroutines.suspendCoroutine { continuation ->
+                        service.captureScreenshot { bmp -> continuation.resume(bmp) }
+                    }
+                    val treeText = service.dumpNodeTreeText()
+                    val descResult = aiProviderManager.describeScreen(bitmap, treeText, "Describe what is on screen in detail and explain key elements.")
+                    descResult.onSuccess { desc ->
+                        chatMessages.add(ChatMessage("Myra", desc))
+                        voiceController.speak(desc)
+                    }.onFailure { err ->
+                        val errText = "Screen analysis failed: ${err.localizedMessage ?: err.message}"
+                        chatMessages.add(ChatMessage("Myra", errText, isError = true))
+                        voiceController.speak(errText)
+                    }
+                }
+
+                isTaskRunningState.value = false
+                taskNotificationManager.clearNotification()
+            }
+            return
+        }
+
         currentTaskJob = lifecycleScope.launch {
             isTaskRunningState.value = true
             taskNotificationManager.showTaskRunningNotification("Processing command: $prompt")
@@ -158,16 +292,18 @@ class MainActivity : ComponentActivity() {
     ): Boolean {
         val requiresConfirmation = action.type == ActionType.CALL ||
                 action.type == ActionType.SEND_SMS ||
-                action.type == ActionType.WHATSAPP
+                action.type == ActionType.WHATSAPP ||
+                action.type == ActionType.POST_SOCIAL_MEDIA
 
         if (requiresConfirmation) {
             val actionTypeName = when (action.type) {
                 ActionType.CALL -> "Call"
                 ActionType.SEND_SMS -> "SMS"
                 ActionType.WHATSAPP -> "WhatsApp Message"
+                ActionType.POST_SOCIAL_MEDIA -> "Social Media Post"
                 else -> action.type.name
             }
-            val recipient = action.recipient ?: action.target ?: "Unknown"
+            val recipient = action.recipient ?: action.platform ?: action.target ?: "Unknown"
             val textMsg = action.textToType ?: action.target
 
             val confirmed = suspendCoroutine<Boolean> { continuation ->
@@ -175,6 +311,9 @@ class MainActivity : ComponentActivity() {
                     actionType = actionTypeName,
                     recipient = recipient,
                     textMessage = textMsg,
+                    platform = action.platform,
+                    caption = action.caption,
+                    hashtags = action.hashtags,
                     onConfirm = {
                         pendingConfirmationState.value = null
                         continuation.resume(true)
@@ -187,7 +326,7 @@ class MainActivity : ComponentActivity() {
             }
 
             if (!confirmed) {
-                val cancelMsg = "Cancelled $actionTypeName to $recipient."
+                val cancelMsg = "Cancelled $actionTypeName for $recipient."
                 chatMessages.add(ChatMessage("Myra", cancelMsg))
                 voiceController.speak(cancelMsg)
                 return false
@@ -245,6 +384,8 @@ class MainActivity : ComponentActivity() {
         currentTaskJob = null
         pendingConfirmationState.value = null
         isTaskRunningState.value = false
+        watchVideoManager.stopWatching()
+        MyraAccessibilityService.getInstance()?.clearGuideHighlight()
         taskNotificationManager.clearNotification()
         voiceController.stopListening()
     }

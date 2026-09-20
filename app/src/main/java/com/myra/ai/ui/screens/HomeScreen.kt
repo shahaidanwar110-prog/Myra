@@ -32,9 +32,12 @@ data class ChatMessage(
 )
 
 data class ActionConfirmation(
-    val actionType: String, // "Call", "SMS", "WhatsApp"
-    val recipient: String,
+    val actionType: String, // "Call", "SMS", "WhatsApp", "Social Post"
+    val recipient: String, // Target contact or Platform
     val textMessage: String? = null,
+    val platform: String? = null,
+    val caption: String? = null,
+    val hashtags: String? = null,
     val onConfirm: () -> Unit,
     val onCancel: () -> Unit
 )
@@ -45,9 +48,11 @@ fun HomeScreen(
     isListening: Boolean,
     isSpeaking: Boolean,
     isTaskRunning: Boolean = false,
+    isWatchingVideo: Boolean = false,
     onStartListening: () -> Unit,
     onStopListening: () -> Unit,
     onStopTask: () -> Unit = {},
+    onStopWatching: () -> Unit = {},
     onSendMessage: (String) -> Unit,
     onOpenSettings: () -> Unit,
     chatMessages: List<ChatMessage>,
@@ -89,6 +94,56 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            // "Myra is watching" Indicator Banner when watching video
+            if (isWatchingVideo) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Myra is watching",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Button(
+                            onClick = onStopWatching,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "Stop Watching",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Stop", color = Color.White)
+                        }
+                    }
+                }
+            }
+
             // Big Stop Task Button when task is running
             if (isTaskRunning) {
                 Button(
@@ -179,27 +234,47 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Confirmation Dialog
+            // Pre-Post / Pre-Action Confirmation Dialog
             pendingConfirmation?.let { conf ->
                 AlertDialog(
                     onDismissRequest = { conf.onCancel() },
                     title = { Text("Confirm ${conf.actionType}") },
                     text = {
                         Column {
-                            Text("Recipient: ${conf.recipient}", fontWeight = FontWeight.Bold)
+                            if (!conf.platform.isNullOrBlank()) {
+                                Text("Platform: ${conf.platform}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                            } else {
+                                Text("Recipient/Target: ${conf.recipient}", fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
+                            if (!conf.caption.isNullOrBlank()) {
+                                Text("Caption:", fontWeight = FontWeight.SemiBold)
+                                Text(conf.caption, style = MaterialTheme.typography.bodySmall)
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
+                            if (!conf.hashtags.isNullOrBlank()) {
+                                Text("Hashtags:", fontWeight = FontWeight.SemiBold)
+                                Text(conf.hashtags, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
                             conf.textMessage?.let { txt ->
-                                if (txt.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Message: $txt")
+                                if (txt.isNotBlank() && conf.caption.isNullOrBlank()) {
+                                    Text("Details: $txt")
+                                    Spacer(modifier = Modifier.height(6.dp))
                                 }
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("Do you want to proceed?", style = MaterialTheme.typography.bodySmall)
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Review details above before final post/action confirmation.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
                     },
                     confirmButton = {
                         Button(onClick = { conf.onConfirm() }) {
-                            Text("Confirm")
+                            Text("Confirm & Post")
                         }
                     },
                     dismissButton = {
