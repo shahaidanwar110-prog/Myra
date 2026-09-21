@@ -101,6 +101,38 @@ open class SecureStorage(context: Context) {
         return sharedPreferences.getString(key, "") ?: ""
     }
 
+    fun saveBoolean(key: String, value: Boolean) {
+        sharedPreferences.edit().putBoolean(key, value).apply()
+    }
+
+    fun getBoolean(key: String, defaultValue: Boolean = false): Boolean {
+        return sharedPreferences.getBoolean(key, defaultValue)
+    }
+
+    fun saveAskBeforeSending(ask: Boolean) {
+        saveBoolean("ask_before_sending", ask)
+    }
+
+    fun isAskBeforeSending(): Boolean {
+        return getBoolean("ask_before_sending", false)
+    }
+
+    fun saveInt(key: String, value: Int) {
+        sharedPreferences.edit().putInt(key, value).apply()
+    }
+
+    fun getInt(key: String, defaultValue: Int = 0): Int {
+        return sharedPreferences.getInt(key, defaultValue)
+    }
+
+    fun saveSilenceAutoStopMinutes(minutes: Int) {
+        saveInt("silence_auto_stop_minutes", minutes)
+    }
+
+    fun getSilenceAutoStopMinutes(): Int {
+        return getInt("silence_auto_stop_minutes", 30)
+    }
+
     fun savePitch(pitch: Float) {
         sharedPreferences.edit().putFloat("tts_pitch", pitch).apply()
     }

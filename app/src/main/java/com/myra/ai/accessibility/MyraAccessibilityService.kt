@@ -15,6 +15,7 @@ class MyraAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        com.myra.ai.util.EventLogger.logServiceStart("MyraAccessibilityService", "Accessibility service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -27,6 +28,7 @@ class MyraAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.myra.ai.util.EventLogger.logServiceStop("MyraAccessibilityService", "Accessibility service destroyed")
         if (instance == this) {
             instance = null
         }
@@ -299,6 +301,19 @@ class MyraAccessibilityService : AccessibilityService() {
 
     fun hideAssistantOverlay() {
         AssistantOverlayManager.hideOverlay()
+    }
+
+    fun clickCoordinates(x: Float, y: Float): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val path = android.graphics.Path().apply {
+                moveTo(x, y)
+            }
+            val gesture = android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 100))
+                .build()
+            return dispatchGesture(gesture, null, null)
+        }
+        return false
     }
 
     fun updateOverlayAudioState(isListening: Boolean, isSpeaking: Boolean) {

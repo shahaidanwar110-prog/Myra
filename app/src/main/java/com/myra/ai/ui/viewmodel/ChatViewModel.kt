@@ -24,7 +24,8 @@ class ChatViewModel(
     private val aiProviderManager: AiProviderManager,
     private val phoneControlManager: PhoneControlManager? = null,
     private val voiceController: VoiceController? = null,
-    private val appDatabase: com.myra.ai.data.db.AppDatabase? = null
+    private val appDatabase: com.myra.ai.data.db.AppDatabase? = null,
+    private val context: android.content.Context? = null
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -45,6 +46,7 @@ class ChatViewModel(
             isThinking = false,
             isSpeaking = false
         )
+        com.myra.ai.util.WakeLockHelper.releaseWakeLock()
     }
 
     fun getProviderInfo(): String {
@@ -84,7 +86,12 @@ class ChatViewModel(
         addMessage(ChatMessage(sender = "User", text = trimmedPrompt))
 
         activeTaskJob = viewModelScope.launch {
-            processPromptInternal(trimmedPrompt, onConfirmationRequired)
+            context?.let { com.myra.ai.util.WakeLockHelper.acquireWakeLock(it) }
+            try {
+                processPromptInternal(trimmedPrompt, onConfirmationRequired)
+            } finally {
+                com.myra.ai.util.WakeLockHelper.releaseWakeLock()
+            }
         }
     }
 
@@ -191,29 +198,52 @@ class ChatViewModel(
                 actionToExecute.type == ActionType.WHATSAPP ||
                 actionToExecute.type == ActionType.POST_SOCIAL_MEDIA
 
-        if (requiresConfirmation && onConfirmationRequired != null) {
-            if (actionToExecute.type == ActionType.POST_SOCIAL_MEDIA && !actionToExecute.caption.isNullOrBlank()) {
-                val spokenPrompt = "I've drafted a comment: \"${actionToExecute.caption}\". Do you want me to post this on ${actionToExecute.platform ?: "Instagram"}?"
-                addMessage(ChatMessage(sender = "Myra", text = spokenPrompt, providerInfo = providerInfo))
-                voiceController?.speak(spokenPrompt)
-            }
-
-            val confirmed = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
-                onConfirmationRequired(actionToExecute) { result ->
-                    if (cont.isActive) cont.resume(result, null)
+        if (requiresConfirmation) {
+            val askBeforeSending = secureStorage.isAskBeforeSending()
+            if (askBeforeSending && onConfirmationRequired != null) {
+                if (actionToExecute.type == ActionType.POST_SOCIAL_MEDIA && !actionToExecute.caption.isNullOrBlank()) {
+                    val spokenPrompt = "I've drafted a comment: \"${actionToExecute.caption}\". Do you want me to post this on ${actionToExecute.platform ?: "Instagram"}?"
+                    addMessage(ChatMessage(sender = "Myra", text = spokenPrompt, providerInfo = providerInfo))
+                    voiceController?.speak(spokenPrompt)
                 }
-            }
 
-            if (!confirmed) {
-                val cancelMsg = "Cancelled ${actionToExecute.type.name}."
-                addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
-                voiceController?.speak(cancelMsg)
-                return
+                val confirmed = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+                    onConfirmationRequired(actionToExecute) { result ->
+                        if (cont.isActive) cont.resume(result, null)
+                    }
+                }
+
+                if (!confirmed) {
+                    val cancelMsg = "Cancelled ${actionToExecute.type.name}."
+                    addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
+                    voiceController?.speak(cancelMsg)
+                    return
+                }
+            } else {
+                // Default ("Ask before sending" OFF): Speak notification and wait 3s cancel window
+                val cancelNotice = "Sending in 3 seconds, say stop to cancel"
+                addMessage(ChatMessage(sender = "Myra", text = cancelNotice, providerInfo = providerInfo))
+                voiceController?.speak(cancelNotice)
+
+                for (i in 1..30) {
+                    kotlinx.coroutines.delay(100L)
+                    if (!kotlin.coroutines.coroutineContext.isActive) {
+                        val cancelMsg = "Cancelled ${actionToExecute.type.name}."
+                        addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
+                        voiceController?.speak(cancelMsg)
+                        return
+                    }
+                }
             }
         }
 
         val targetStr = actionToExecute.target ?: actionToExecute.recipient ?: actionToExecute.caption ?: actionToExecute.textToType ?: "N/A"
-        val execResult = PhoneActionExecutor.executeAction(actionToExecute, phoneControlManager, maxRetries = 2)
+        val execResult = PhoneActionExecutor.executeAction(
+            action = actionToExecute,
+            phoneControlManager = phoneControlManager,
+            maxRetries = 2,
+            aiProviderManager = aiProviderManager
+        )
 
         val isSuccess = execResult.isSuccess
         val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
@@ -273,7 +303,12 @@ class ChatViewModel(
 
             val pcm = phoneControlManager ?: break
             val targetStr = step.target ?: step.recipient ?: step.textToType ?: "N/A"
-            val execResult = PhoneActionExecutor.executeAction(step, pcm, maxRetries = 2)
+            val execResult = PhoneActionExecutor.executeAction(
+                action = step,
+                phoneControlManager = pcm,
+                maxRetries = 2,
+                aiProviderManager = aiProviderManager
+            )
 
             val isSuccess = execResult.isSuccess
             val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }

@@ -10,6 +10,8 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 class PhoneControlManager(private val context: Context) {
 
@@ -82,6 +84,40 @@ class PhoneControlManager(private val context: Context) {
             Result.success("SMS sent to $recipient ($phoneNumber).")
         } catch (e: Exception) {
             Result.failure(Exception("Failed to send SMS: ${e.localizedMessage}"))
+        }
+    }
+
+    suspend fun openSmsAppAndSend(recipient: String, messageText: String): Result<String> {
+        val phoneNumber = findContactPhoneNumber(recipient) ?: recipient
+
+        try {
+            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phoneNumber")).apply {
+                putExtra("sms_body", messageText)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+
+            kotlinx.coroutines.delay(1800L)
+
+            val service = MyraAccessibilityService.getInstance()
+            if (service != null) {
+                val clicked = service.clickSendButton() || service.clickText("Send")
+                if (clicked) {
+                    com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient via Messages UI")
+                    return Result.success("Sent message to $recipient via Messages UI.")
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Fallback to SmsManager if UI steps fail
+        val fallbackRes = sendSms(recipient, messageText)
+        return if (fallbackRes.isSuccess) {
+            com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient via SmsManager fallback")
+            Result.success("Sent message to $recipient via SmsManager fallback.")
+        } else {
+            fallbackRes
         }
     }
 
@@ -340,19 +376,54 @@ class PhoneControlManager(private val context: Context) {
         }
     }
 
-    suspend fun postInstagramComment(commentText: String): Result<String> {
+    suspend fun postInstagramComment(
+        commentText: String,
+        aiProviderManager: com.myra.ai.ai.AiProviderManager? = null
+    ): Result<String> {
         val openResult = openAppByName("Instagram")
-        if (openResult.isFailure) return openResult
+        if (openResult.isFailure) {
+            com.myra.ai.util.EventLogger.logCommandResult("InstagramComment", false, "Failed to open Instagram app")
+            return openResult
+        }
 
         kotlinx.coroutines.delay(1500L)
 
         val service = MyraAccessibilityService.getInstance()
             ?: return Result.failure(Exception("Accessibility service is disabled. Enable Myra in Accessibility Settings."))
 
-        // Try clicking comment button / input field
-        val commentClicked = service.clickText("Add a comment...") ||
+        // 1. Try clicking comment button / input field via accessibility node tree
+        var commentClicked = service.clickText("Add a comment...") ||
                 service.clickText("Comment") ||
                 service.clickText("Comments")
+
+        // 2. If not found in tree, fallback to Vision screenshot coordinates
+        if (!commentClicked && aiProviderManager != null) {
+            val bitmap = kotlin.coroutines.suspendCoroutine<android.graphics.Bitmap?> { cont ->
+                service.captureScreenshot { bmp -> cont.resume(bmp) }
+            }
+
+            if (bitmap != null) {
+                val visionPrompt = """
+                    Analyze this Instagram screen screenshot.
+                    Find the exact location of the Comment button or speech bubble icon.
+                    Return the relative percentage position from 0 to 100 in this format:
+                    COORDS: X, Y
+                """.trimIndent()
+
+                val descRes = aiProviderManager.describeScreen(bitmap, "", visionPrompt)
+                val reply = descRes.getOrNull() ?: ""
+                val match = Regex("COORDS:\\s*([0-9.]+)\\s*,\\s*([0-9.]+)", RegexOption.IGNORE_CASE).find(reply)
+                if (match != null) {
+                    val pctX = match.groupValues[1].toFloatOrNull() ?: 50f
+                    val pctY = match.groupValues[2].toFloatOrNull() ?: 50f
+                    val xPx = (pctX / 100f) * bitmap.width
+                    val yPx = (pctY / 100f) * bitmap.height
+
+                    commentClicked = service.clickCoordinates(xPx, yPx)
+                    kotlinx.coroutines.delay(800L)
+                }
+            }
+        }
 
         if (commentClicked) {
             kotlinx.coroutines.delay(800L)
@@ -371,14 +442,20 @@ class PhoneControlManager(private val context: Context) {
                 service.clickText("Post")
                 Result.success("Typed and posted comment: \"$commentText\".")
             } else {
-                Result.failure(Exception("Could not locate Instagram comment field on active screen."))
+                val errReason = "Could not locate Instagram comment button or input field on active screen via tree or Vision."
+                com.myra.ai.util.EventLogger.logCommandResult("InstagramComment", false, errReason)
+                Result.failure(Exception(errReason))
             }
         }
     }
 
-    suspend fun postToSocialPlatform(platform: String, captionAndHashtags: String): Result<String> {
+    suspend fun postToSocialPlatform(
+        platform: String,
+        captionAndHashtags: String,
+        aiProviderManager: com.myra.ai.ai.AiProviderManager? = null
+    ): Result<String> {
         if (platform.contains("Instagram", ignoreCase = true)) {
-            return postInstagramComment(captionAndHashtags)
+            return postInstagramComment(captionAndHashtags, aiProviderManager)
         }
 
         val openResult = openAppByName(platform)

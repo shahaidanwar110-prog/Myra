@@ -207,7 +207,8 @@ object PhoneActionExecutor {
     suspend fun executeAction(
         action: SystemAction,
         phoneControlManager: PhoneControlManager,
-        maxRetries: Int = 2
+        maxRetries: Int = 2,
+        aiProviderManager: AiProviderManager? = null
     ): Result<String> {
         // Direct intent optimization: YouTube Search
         if (action.type == ActionType.OPEN_APP && action.target.equals("YouTube", ignoreCase = true) && !action.textToType.isNullOrBlank()) {
@@ -247,7 +248,7 @@ object PhoneActionExecutor {
                 ActionType.SEND_SMS -> {
                     val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for SMS."))
                     val text = action.textToType ?: action.target ?: ""
-                    phoneControlManager.sendSms(recipient, text)
+                    phoneControlManager.openSmsAppAndSend(recipient, text)
                 }
                 ActionType.WHATSAPP -> {
                     val recipient = action.recipient ?: return Result.failure(Exception("Recipient not specified for WhatsApp."))
@@ -257,7 +258,7 @@ object PhoneActionExecutor {
                 ActionType.POST_SOCIAL_MEDIA -> {
                     val plat = action.platform ?: action.target ?: "Social App"
                     val fullCaption = "${action.caption ?: ""} ${action.hashtags ?: ""}".trim()
-                    phoneControlManager.postToSocialPlatform(plat, fullCaption)
+                    phoneControlManager.postToSocialPlatform(plat, fullCaption, aiProviderManager)
                 }
                 ActionType.MULTI_STEP -> Result.success(action.message ?: "Starting multi-step task...")
                 ActionType.CHAT_RESPONSE -> Result.success(action.message ?: "")
