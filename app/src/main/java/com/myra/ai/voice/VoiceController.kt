@@ -2,15 +2,30 @@ package com.myra.ai.voice
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Base64
 import com.myra.ai.data.SecureStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 data class VoiceInfo(
@@ -26,7 +41,10 @@ class VoiceController(
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
+    private var mediaPlayer: MediaPlayer? = null
     private var isTtsReady = false
+    private var activeLastUtteranceId: String = ""
+    private val geminiTtsTimestamps = mutableListOf<Long>()
 
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening
@@ -178,17 +196,26 @@ class VoiceController(
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    _isSpeaking.value = false
-                    if (isLiveMode) {
-                        mainHandler.postDelayed({
-                            if (isLiveMode) startListening()
-                        }, 400L)
+                    if (utteranceId == activeLastUtteranceId || utteranceId?.startsWith("myra_preview") == true) {
+                        _isSpeaking.value = false
+                        if (isLiveMode) {
+                            mainHandler.postDelayed({
+                                if (isLiveMode && !_isSpeaking.value) startListening()
+                            }, 400L)
+                        }
                     }
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    _isSpeaking.value = false
+                    if (utteranceId == activeLastUtteranceId) {
+                        _isSpeaking.value = false
+                        if (isLiveMode) {
+                            mainHandler.postDelayed({
+                                if (isLiveMode && !_isSpeaking.value) startListening()
+                            }, 400L)
+                        }
+                    }
                 }
             })
             updateTtsLanguage()
@@ -240,24 +267,236 @@ class VoiceController(
     fun updateTtsLanguage() {
         if (!isTtsReady) return
         val langTag = secureStorage.getLanguage()
-        val locale = when (langTag) {
+        var locale = when (langTag) {
             "ur-PK" -> Locale("ur", "PK")
             "hi-IN" -> Locale("hi", "IN")
             else -> Locale.US
         }
-        textToSpeech?.language = locale
+        var res = textToSpeech?.setLanguage(locale)
+        if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+            if (langTag == "ur-PK") {
+                locale = Locale("hi", "IN")
+                res = textToSpeech?.setLanguage(locale)
+                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    locale = Locale.US
+                    textToSpeech?.setLanguage(locale)
+                }
+            } else if (langTag == "hi-IN") {
+                locale = Locale.US
+                textToSpeech?.setLanguage(locale)
+            }
+        }
         applyTtsSettings()
     }
 
     fun speak(text: String) {
-        if (!isTtsReady) return
+        if (!isTtsReady || text.isBlank()) return
+        stopListening()
         updateTtsLanguage()
         applyTtsSettings()
-        val utteranceId = "myra_tts_${System.currentTimeMillis()}"
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+
+        val chunks = text.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+        if (chunks.isEmpty()) return
+
+        val baseId = "myra_tts_${System.currentTimeMillis()}"
+        var lastId = ""
+        for ((index, chunk) in chunks.withIndex()) {
+            val id = "${baseId}_$index"
+            lastId = id
+            textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, id)
+        }
+        activeLastUtteranceId = lastId
+        _isSpeaking.value = true
+    }
+
+    fun getStyleInstruction(emotion: String?): String {
+        return when (emotion?.lowercase()?.trim()) {
+            "happy" -> "Say cheerfully and with joy:"
+            "playful" -> "Say warmly and playfully:"
+            "caring" -> "Say with deep warmth, care, and tenderness:"
+            "excited" -> "Say with excitement and enthusiasm:"
+            "sad" -> "Say gently with sympathy and warmth:"
+            "shy" -> "Say softly, shyly, and warmly:"
+            "teasing" -> "Say with playful teasing and amusement:"
+            "calm" -> "Say calmly, softly, and soothingly:"
+            else -> "Say warmly and naturally:"
+        }
+    }
+
+    fun speakExpressiveOrFallback(text: String, emotion: String? = null, overrideVoice: String? = null) {
+        if (text.isBlank()) return
+        stopSpeaking()
+
+        val isExpressiveEnabled = secureStorage.isExpressiveVoiceEnabled()
+        val geminiKey = secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)
+
+        if (isExpressiveEnabled && geminiKey.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            synchronized(geminiTtsTimestamps) {
+                geminiTtsTimestamps.removeAll { now - it >= 60_000L }
+            }
+
+            if (geminiTtsTimestamps.size < 3) {
+                synchronized(geminiTtsTimestamps) {
+                    geminiTtsTimestamps.add(now)
+                }
+
+                CoroutineScope(Dispatchers.IO).launch {
+                    val success = trySpeakGeminiTts(text, emotion, overrideVoice)
+                    if (!success) {
+                        withContext(Dispatchers.Main) {
+                            speak(text)
+                        }
+                    }
+                }
+                return
+            }
+        }
+
+        speak(text)
+    }
+
+    fun previewGeminiVoice(voiceName: String, sampleText: String) {
+        speakExpressiveOrFallback(sampleText, emotion = "playful", overrideVoice = voiceName)
+    }
+
+    private suspend fun trySpeakGeminiTts(
+        text: String,
+        emotion: String?,
+        overrideVoice: String?
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val geminiKey = secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)
+            if (geminiKey.isBlank()) return@withContext false
+
+            val ttsModel = secureStorage.getGeminiTtsModel().ifBlank { "gemini-3.1-flash-tts-preview" }
+            val voiceName = overrideVoice ?: secureStorage.getGeminiVoice().ifBlank { "Kore" }
+
+            val styleInstruction = getStyleInstruction(emotion)
+            val promptText = "$styleInstruction $text"
+
+            val urlStr = "https://generativelanguage.googleapis.com/v1beta/models/$ttsModel:generateContent?key=$geminiKey"
+
+            val body = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", promptText) })
+                        })
+                    })
+                })
+                put("generationConfig", JSONObject().apply {
+                    put("responseModalities", JSONArray().apply { put("AUDIO") })
+                    put("speechConfig", JSONObject().apply {
+                        put("voiceConfig", JSONObject().apply {
+                            put("prebuiltVoiceConfig", JSONObject().apply {
+                                put("voiceName", voiceName)
+                            })
+                        })
+                    })
+                })
+            }
+
+            val headers = mapOf("Content-Type" to "application/json")
+            val (code, responseBody) = httpPost(urlStr, headers, body.toString())
+
+            if (code !in 200..299 || responseBody.isNullOrBlank()) return@withContext false
+
+            val obj = JSONObject(responseBody)
+            val candidates = obj.optJSONArray("candidates") ?: return@withContext false
+            if (candidates.length() == 0) return@withContext false
+
+            val candidate = candidates.getJSONObject(0)
+            val content = candidate.optJSONObject("content") ?: return@withContext false
+            val parts = content.optJSONArray("parts") ?: return@withContext false
+            if (parts.length() == 0) return@withContext false
+
+            val part = parts.getJSONObject(0)
+            val inlineData = part.optJSONObject("inlineData") ?: return@withContext false
+            val base64Data = inlineData.optString("data", "")
+
+            if (base64Data.isBlank()) return@withContext false
+
+            val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
+            val tempFile = File(context.cacheDir, "gemini_tts_${System.currentTimeMillis()}.mp3")
+            FileOutputStream(tempFile).use { it.write(audioBytes) }
+
+            withContext(Dispatchers.Main) {
+                playAudioFile(tempFile)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun playAudioFile(file: File) {
+        stopListening()
+        stopSpeaking()
+
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(file.absolutePath)
+                prepare()
+                setOnCompletionListener {
+                    _isSpeaking.value = false
+                    try { file.delete() } catch (e: Exception) {}
+                    if (isLiveMode) {
+                        mainHandler.postDelayed({
+                            if (isLiveMode && !_isSpeaking.value) startListening()
+                        }, 400L)
+                    }
+                }
+                setOnErrorListener { _, _, _ ->
+                    _isSpeaking.value = false
+                    try { file.delete() } catch (e: Exception) {}
+                    if (isLiveMode) {
+                        mainHandler.postDelayed({
+                            if (isLiveMode && !_isSpeaking.value) startListening()
+                        }, 400L)
+                    }
+                    true
+                }
+                start()
+            }
+            _isSpeaking.value = true
+        } catch (e: Exception) {
+            _isSpeaking.value = false
+            try { file.delete() } catch (ex: Exception) {}
+        }
+    }
+
+    private fun httpPost(urlString: String, headers: Map<String, String>, bodyJson: String): Pair<Int, String?> {
+        return try {
+            val url = URL(urlString)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                doInput = true
+                connectTimeout = 15000
+                readTimeout = 15000
+                headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            }
+            OutputStreamWriter(conn.outputStream, "UTF-8").use { os ->
+                os.write(bodyJson)
+                os.flush()
+            }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val resp = stream?.let { BufferedReader(InputStreamReader(it, "UTF-8")).use { r -> r.readText() } }
+            Pair(code, resp)
+        } catch (e: Exception) {
+            Pair(-1, null)
+        }
     }
 
     fun stopSpeaking() {
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: Exception) {}
+        mediaPlayer = null
+
         if (isTtsReady) {
             textToSpeech?.stop()
             _isSpeaking.value = false

@@ -133,6 +133,32 @@ open class SecureStorage(context: Context) {
         return getInt("silence_auto_stop_minutes", 30)
     }
 
+    fun saveExpressiveVoiceEnabled(enabled: Boolean) {
+        saveBoolean("expressive_voice_enabled", enabled)
+    }
+
+    fun isExpressiveVoiceEnabled(): Boolean {
+        return getBoolean("expressive_voice_enabled", false)
+    }
+
+    fun saveGeminiTtsModel(model: String) {
+        saveString("gemini_tts_model", model)
+    }
+
+    fun getGeminiTtsModel(): String {
+        val saved = getString("gemini_tts_model")
+        return if (saved.isBlank()) "gemini-3.1-flash-tts-preview" else saved
+    }
+
+    fun saveGeminiVoice(voice: String) {
+        saveString("gemini_voice", voice)
+    }
+
+    fun getGeminiVoice(): String {
+        val saved = getString("gemini_voice")
+        return if (saved.isBlank()) "Kore" else saved
+    }
+
     fun savePitch(pitch: Float) {
         sharedPreferences.edit().putFloat("tts_pitch", pitch).apply()
     }
@@ -214,7 +240,7 @@ open class SecureStorage(context: Context) {
 
         const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
         const val DEFAULT_OPENAI_MODEL = "gpt-4o"
-        const val DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
+        const val DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
         const val DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
         const val DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct"
     }

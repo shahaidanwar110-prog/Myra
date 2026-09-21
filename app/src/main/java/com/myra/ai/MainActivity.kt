@@ -173,6 +173,9 @@ class MainActivity : ComponentActivity() {
                                     availableVoices = voiceController.getAvailableVoices(),
                                     onPreviewVoice = { voiceName, sampleText, pitch, rate ->
                                         voiceController.previewVoice(voiceName, sampleText, pitch, rate)
+                                    },
+                                    onPreviewGeminiVoice = { voiceName, sampleText ->
+                                        voiceController.previewGeminiVoice(voiceName, sampleText)
                                     }
                                 )
                             }

@@ -555,27 +555,89 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
             return Result.failure(Exception("$providerName API key is missing."))
         }
 
-        val url = when (providerName) {
-            SecureStorage.PROVIDER_GROQ -> "https://api.groq.com/openai/v1/models"
-            SecureStorage.PROVIDER_OPENROUTER -> "https://openrouter.ai/api/v1/models"
-            else -> return Result.failure(Exception("Fetching models is only supported for Groq and OpenRouter."))
-        }
-
-        val headers = mapOf(
-            "Authorization" to "Bearer $apiKey"
-        )
-
-        val res = httpGetRequest(url, headers)
-        return res.mapCatching { json ->
-            val obj = JSONObject(json)
-            val data = obj.getJSONArray("data")
-            val modelList = mutableListOf<String>()
-            for (i in 0 until data.length()) {
-                val modelObj = data.getJSONObject(i)
-                val id = modelObj.optString("id")
-                if (id.isNotBlank()) modelList.add(id)
+        return when (providerName) {
+            SecureStorage.PROVIDER_GROQ -> {
+                val url = "https://api.groq.com/openai/v1/models"
+                val headers = mapOf("Authorization" to "Bearer $apiKey")
+                httpGetRequest(url, headers).mapCatching { json ->
+                    val obj = JSONObject(json)
+                    val data = obj.getJSONArray("data")
+                    val modelList = mutableListOf<String>()
+                    for (i in 0 until data.length()) {
+                        val id = data.getJSONObject(i).optString("id")
+                        if (id.isNotBlank()) modelList.add(id)
+                    }
+                    modelList
+                }
             }
-            modelList
+            SecureStorage.PROVIDER_OPENROUTER -> {
+                val url = "https://openrouter.ai/api/v1/models"
+                val headers = mapOf("Authorization" to "Bearer $apiKey")
+                httpGetRequest(url, headers).mapCatching { json ->
+                    val obj = JSONObject(json)
+                    val data = obj.getJSONArray("data")
+                    val modelList = mutableListOf<String>()
+                    for (i in 0 until data.length()) {
+                        val id = data.getJSONObject(i).optString("id")
+                        if (id.isNotBlank()) modelList.add(id)
+                    }
+                    modelList
+                }
+            }
+            SecureStorage.PROVIDER_GEMINI -> {
+                val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey"
+                httpGetRequest(url, emptyMap()).mapCatching { json ->
+                    val obj = JSONObject(json)
+                    val models = obj.optJSONArray("models") ?: JSONArray()
+                    val modelList = mutableListOf<String>()
+                    for (i in 0 until models.length()) {
+                        val rawName = models.getJSONObject(i).optString("name")
+                        if (rawName.isNotBlank()) {
+                            modelList.add(rawName.removePrefix("models/"))
+                        }
+                    }
+                    if (modelList.isEmpty()) listOf(SecureStorage.DEFAULT_GEMINI_MODEL) else modelList
+                }
+            }
+            SecureStorage.PROVIDER_OPENAI -> {
+                val url = "https://api.openai.com/v1/models"
+                val headers = mapOf("Authorization" to "Bearer $apiKey")
+                httpGetRequest(url, headers).mapCatching { json ->
+                    val obj = JSONObject(json)
+                    val data = obj.optJSONArray("data") ?: JSONArray()
+                    val modelList = mutableListOf<String>()
+                    for (i in 0 until data.length()) {
+                        val id = data.getJSONObject(i).optString("id")
+                        if (id.isNotBlank() && (id.startsWith("gpt-") || id.startsWith("o1") || id.startsWith("o3"))) {
+                            modelList.add(id)
+                        }
+                    }
+                    if (modelList.isEmpty()) listOf(SecureStorage.DEFAULT_OPENAI_MODEL, "gpt-4o", "gpt-4o-mini") else modelList.sorted()
+                }
+            }
+            SecureStorage.PROVIDER_ANTHROPIC -> {
+                val url = "https://api.anthropic.com/v1/models"
+                val headers = mapOf(
+                    "x-api-key" to apiKey,
+                    "anthropic-version" to "2023-06-01"
+                )
+                val res = httpGetRequest(url, headers)
+                if (res.isSuccess) {
+                    res.mapCatching { json ->
+                        val obj = JSONObject(json)
+                        val data = obj.optJSONArray("data") ?: JSONArray()
+                        val modelList = mutableListOf<String>()
+                        for (i in 0 until data.length()) {
+                            val id = data.getJSONObject(i).optString("id")
+                            if (id.isNotBlank()) modelList.add(id)
+                        }
+                        if (modelList.isEmpty()) listOf(SecureStorage.DEFAULT_ANTHROPIC_MODEL, "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022") else modelList
+                    }
+                } else {
+                    Result.success(listOf(SecureStorage.DEFAULT_ANTHROPIC_MODEL, "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"))
+                }
+            }
+            else -> Result.failure(Exception("Unknown provider: $providerName"))
         }
     }
 
