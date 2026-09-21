@@ -38,7 +38,7 @@ class VoiceController(
     val isSpeaking: StateFlow<Boolean> = _isSpeaking
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    var isLiveMode: Boolean = false
+    var isLiveMode: Boolean = true
         private set
 
     private var silenceRunnable: Runnable? = null
@@ -60,13 +60,15 @@ class VoiceController(
     private fun resetSilenceTimer() {
         cancelSilenceTimer()
         if (!isLiveMode) return
+        val timeoutMins = secureStorage.getSilenceAutoStopMinutes()
+        val timeoutMs = timeoutMins * 60 * 1000L
         silenceRunnable = Runnable {
             if (isLiveMode) {
                 setLiveMode(false)
                 onSilenceTimeoutListener?.invoke()
             }
         }
-        mainHandler.postDelayed(silenceRunnable!!, 120000L) // 2 minutes auto-stop
+        mainHandler.postDelayed(silenceRunnable!!, timeoutMs)
     }
 
     private fun cancelSilenceTimer() {

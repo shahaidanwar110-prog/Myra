@@ -1,5 +1,91 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint E: Hands-free Listening & Setup Wizard
+- **Status**: Completed & Verified
+- **What Works**:
+  - Hands-free Listening Default ON: Continuous speech listening loop enabled by default in `VoiceController.kt`.
+  - Configurable Silence Auto-Stop: Settable silence auto-stop timer in `SecureStorage.kt` & `SettingsScreen.kt` (default: 30 minutes).
+  - Auto-Restart Speech Recognition: Speech recognition auto-restarts after every command, TTS finish, or error without requiring any manual mic tapping.
+  - First-Run All-In-One Setup Wizard (`OnboardingScreen.kt`): Single setup flow walking through all 8 system permissions (Microphone, Notifications, Display over other apps, Accessibility, Battery, Contacts, Phone, SMS) with direct action buttons, concluding with a "You can close the app now" confirmation banner.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/OnboardingScreen.kt`
+  - `STATUS.md`
+
+## Checkpoint D: Human-like Messaging & 3-Second Cancellation Window
+- **Status**: Completed & Verified
+- **What Works**:
+  - Visible Messaging UI: Opens phone's Messages or WhatsApp app visibly, finds/creates chat, types message and presses Send via accessibility service so user can watch on screen.
+  - "Ask before sending" Setting: Added switch to `SecureStorage` and `SettingsScreen` (default Off).
+  - 3-Second Spoken Cancel Window: When "Ask before sending" is Off (default), Myra speaks "Sending in 3 seconds, say stop to cancel" and waits 3 seconds. Saying "stop" or "cancel" immediately aborts the sending task without showing dialogs.
+  - SmsManager Fallback & Path Reporting: Falls back to direct `SmsManager` only if accessibility UI steps fail, reporting clearly which path was used ("Messages UI" vs "SmsManager fallback").
+  - Screen Wake Lock (`WakeLockHelper.kt`): Acquires screen wake lock during task execution so the display remains bright while the user watches.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/accessibility/PhoneControlManager.kt`
+  - `app/src/main/java/com/myra/ai/ai/PhoneActionExecutor.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/util/WakeLockHelper.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
+## Checkpoint C: Voice Over Other Apps & Vision Coordinates
+- **Status**: Completed & Verified
+- **What Works**:
+  - Voice Commands Over Other Apps: Recognizes background voice commands ("look at my screen", "read this post", "close the app", "go back", "open Facebook") while user is in another app.
+  - Vision Screen Reading & Follow-ups: Captures screenshot via `MyraAccessibilityService`, analyzes post/screen content via vision model, speaks answer aloud, and follows up with "What do you want to show me?".
+  - Instagram & App Commenting Vision Coordinate Fallback: If Comment button is missing from the accessibility node tree, uses vision AI model to locate relative `(x, y)` percentage coordinates on screenshot and taps via `dispatchGesture` coordinates click (`clickCoordinates`), types comment and taps Post.
+  - Task Log Step Failure Tracking: Logs failure reasons in Task Log (`task_step_logs`) and `EventLogger` whenever a step fails.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/accessibility/MyraAccessibilityService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/PhoneControlManager.kt`
+  - `app/src/main/java/com/myra/ai/ai/CommandParser.kt`
+  - `app/src/main/java/com/myra/ai/ai/PhoneActionExecutor.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
+## Checkpoint B: Stay Alive & Background Resilience
+- **Status**: Completed & Verified
+- **What Works**:
+  - Seamless Background Movement: Tapping "Screen" or saying "go to background" moves Myra to the background (`moveTaskToBack(true)` / `pressHome()`) WITHOUT stopping foreground overlay service or live voice listening.
+  - Microphone Foreground Service (`OverlayForegroundService.kt`): Declared with `android:foregroundServiceType="microphone"`, `START_STICKY`, and persistent ongoing notification with Stop action.
+  - Watchdog Restart Mechanism (`ServiceWatchdogReceiver.kt`): Registered broadcast receiver and `onTaskRemoved` hook that schedules auto-restart if the service is killed by OS or swiped from Recents.
+  - Exact Diagnostics Reason: Captures exact service start errors in `DiagnosticsHelper.lastError` and displays detailed status in `DiagnosticsScreen.kt`.
+  - Brand-Specific Autostart & Battery Guides: Step-by-step setup cards in `DiagnosticsScreen.kt` for Xiaomi (MIUI/HyperOS), Samsung Galaxy, Oppo/Realme, Vivo/iQOO, Huawei, OnePlus, and Stock Android with direct app settings launch buttons.
+- **Files Pushed**:
+  - `app/src/main/AndroidManifest.xml`
+  - `app/src/main/java/com/myra/ai/accessibility/OverlayForegroundService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/ServiceWatchdogReceiver.kt`
+  - `app/src/main/java/com/myra/ai/ai/CommandParser.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/DiagnosticsScreen.kt`
+  - `STATUS.md`
+
+## Checkpoint A: Event Log System & Persistent Event Logging Screen
+- **Status**: Completed & Verified
+- **What Works**:
+  - Persistent Event Log Database (`EventLogEntity.kt`, `EventLogDao.kt`, `AppDatabase.kt` v3): Persistent SQLite Room database storing every system event with timestamp, event type, tag, message, reason, and status badge.
+  - Uncaught Exception Handler (`EventLogger.kt`): Global `Thread.setDefaultUncaughtExceptionHandler` that captures crashes and stack traces, logging them persistently into Room DB.
+  - Instrument Service & Permission Logging: Writes service start/stop events (`OverlayForegroundService`, `MyraAccessibilityService`), permission failures, and command execution results into persistent logs.
+  - Dedicated Event Log Screen (`EventLogScreen.kt`): Filterable log list with color-coded status badges, formatted timestamps, and monospace exception details.
+  - Copy & Share Functionality: Copy button formats logs to system clipboard; Share button opens native Android share chooser (`Intent.ACTION_SEND`). Clear logs action supported.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/db/EventLogEntity.kt`
+  - `app/src/main/java/com/myra/ai/data/db/EventLogDao.kt`
+  - `app/src/main/java/com/myra/ai/data/db/AppDatabase.kt`
+  - `app/src/main/java/com/myra/ai/util/EventLogger.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/OverlayForegroundService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/MyraAccessibilityService.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/EventLogScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
 ## Checkpoint C: Reliability, Settings Audit, Groq & OpenRouter Providers, Provider Fallback & On-Device Parser
 - **Status**: Completed & Verified
 - **What Works**:

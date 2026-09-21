@@ -78,6 +78,7 @@ fun SettingsScreen(
     var voiceLangTab by remember { mutableStateOf("en") }
 
     var showSavedMsg by remember { mutableStateOf(false) }
+    var silenceAutoStop by remember { mutableIntStateOf(secureStorage.getSilenceAutoStopMinutes()) }
 
     Scaffold(
         topBar = {
@@ -793,6 +794,30 @@ fun SettingsScreen(
             }
         )
     }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Column {
+                Text(
+                    text = "Silence Auto-Stop: $silenceAutoStop minutes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Hands-free continuous listening automatically pauses after $silenceAutoStop minutes of silence.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = silenceAutoStop.toFloat(),
+                    onValueChange = {
+                        silenceAutoStop = it.toInt()
+                        secureStorage.saveSilenceAutoStopMinutes(silenceAutoStop)
+                    },
+                    valueRange = 5f..120f,
+                    steps = 22
+                )
+            }
 }
 
 fun parseFavoriteVoices(jsonString: String): List<FavoriteVoice> {

@@ -15,10 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
@@ -366,7 +366,7 @@ private fun ApiKeyStepContent(
             contentPadding = PaddingValues(14.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Launch,
+                imageVector = Icons.AutoMirrored.Filled.Launch,
                 contentDescription = "Get API Key",
                 modifier = Modifier.size(18.dp)
             )
@@ -457,51 +457,92 @@ private fun PermissionsStepContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        PermissionGuideCard(
-            title = "1. Microphone & Audio",
-            description = "Required for voice interaction and multi-lingual voice commands.",
-            buttonText = "Grant Audio Permission",
-            onGrant = {
-                // Audio permission requested when tapping mic in app
-            }
+        val permissionsList = listOf(
+            Triple("1. Microphone Permission", "Required for continuous hands-free voice commands.", "Grant Mic Permission"),
+            Triple("2. Notification Permission", "Required for persistent foreground service & status.", "Grant Notification Permission"),
+            Triple("3. Display Over Other Apps", "Required for floating orb and assistant overlay on top of apps.", "Open Overlay Settings"),
+            Triple("4. Accessibility Service", "Required for gestures, scrolling, tapping, and screen inspection.", "Open Accessibility Settings"),
+            Triple("5. Battery Optimization", "Required to prevent Android OS from killing background service.", "Disable Battery Restrictions"),
+            Triple("6. Contacts Permission", "Required to search contacts for calling and messaging.", "Grant Contacts Permission"),
+            Triple("7. Phone Call Permission", "Required to make phone calls hands-free.", "Grant Phone Permission"),
+            Triple("8. SMS Permission", "Required to send text messages hands-free.", "Grant SMS Permission")
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PermissionGuideCard(
-            title = "2. Accessibility Service",
-            description = "Allows Myra to perform taps, scroll, and analyze screen elements for Guide mode.",
-            buttonText = "Open Accessibility Settings",
-            onGrant = {
-                try {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
+        permissionsList.forEachIndexed { index, (title, desc, btnText) ->
+            PermissionGuideCard(
+                title = title,
+                description = desc,
+                buttonText = btnText,
+                onGrant = {
+                    try {
+                        when (index) {
+                            2 -> {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                            3 -> {
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                context.startActivity(intent)
+                            }
+                            4 -> {
+                                val intent = Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                            else -> {
+                                val intent = Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Confirmation notice telling user they can close the app
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "First-Run Setup Complete!",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "No mic tapping needed anymore! Live listening stays ON in the background. You can close the app now—Myra will stay active with you hands-free.",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
-        )
+        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PermissionGuideCard(
-            title = "3. Display Over App (Overlay)",
-            description = "Enables Guide Mode highlights directly over other apps.",
-            buttonText = "Open Overlay Settings",
-            onGrant = {
-                try {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = onFinish,
@@ -523,7 +564,7 @@ private fun PermissionsStepContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Finish & Launch Myra",
+                    "Finish & Start Hands-Free Mode",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -566,7 +607,7 @@ private fun PermissionGuideCard(
                 Text(buttonText, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
-                    imageVector = Icons.Default.Launch,
+                    imageVector = Icons.AutoMirrored.Filled.Launch,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
