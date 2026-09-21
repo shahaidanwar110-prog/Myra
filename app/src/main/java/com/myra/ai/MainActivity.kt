@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -302,36 +304,83 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SplashScreenContent() {
+        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "splash_glow")
+        val glowScale by infiniteTransition.animateFloat(
+            initialValue = 0.95f,
+            targetValue = 1.12f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                animation = androidx.compose.animation.core.tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+            ),
+            label = "glowScale"
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            com.myra.ai.ui.theme.DarkBackground,
+                            com.myra.ai.ui.theme.SurfaceDark,
+                            com.myra.ai.ui.theme.DarkBackground
+                        )
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.myra_avatar),
-                    contentDescription = "Myra Splash Logo",
-                    modifier = Modifier
-                        .size(160.dp)
-                        .clip(CircleShape)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(200.dp)
+                ) {
+                    // Soft glowing aura behind orb avatar logo
+                    Box(
+                        modifier = Modifier
+                            .scale(glowScale)
+                            .size(190.dp)
+                            .clip(CircleShape)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.radialGradient(
+                                    colors = listOf(
+                                        com.myra.ai.ui.theme.GoldPrimary.copy(alpha = 0.4f),
+                                        com.myra.ai.ui.theme.PrimaryPurple.copy(alpha = 0.3f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
+                    Image(
+                        painter = painterResource(id = R.drawable.myra_avatar),
+                        contentDescription = "Myra Splash Orb Logo",
+                        modifier = Modifier
+                            .size(150.dp)
+                            .clip(CircleShape)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
                 Text(
-                    text = "Myra AI",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 2.sp
+                    text = "MYRA AI",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = com.myra.ai.ui.theme.GoldPrimary,
+                    letterSpacing = 4.sp
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
-                    text = "Smart Hands-Free Assistant",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "VIP Multimodal Assistant",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = com.myra.ai.ui.theme.VioletAccent,
+                    letterSpacing = 1.5.sp
                 )
             }
         }

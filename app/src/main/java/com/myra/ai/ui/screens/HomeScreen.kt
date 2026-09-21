@@ -136,7 +136,7 @@ fun MainAppStructure(
                     Triple("agents", "Agents", Icons.Default.SmartToy),
                     Triple("task_log", "Task Log", Icons.Default.History),
                     Triple("code_mode", "Website / Coding", Icons.Default.Code),
-                    Triple("guide", "Guide Mode", Icons.Default.CompassCalibration),
+                    Triple("guide", "Guide Mode", Icons.Default.Explore),
                     Triple("diagnostics", "Diagnostics", Icons.Default.BugReport),
                     Triple("settings", "Settings", Icons.Default.Settings),
                     Triple("permissions", "Permissions", Icons.Default.Security)
@@ -399,7 +399,7 @@ fun HomeTabContent(
         // Top Greeting & Avatar Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 4.dp)
+            modifier = Modifier.padding(vertical = 2.dp)
         ) {
             Text(
                 text = "Hello, I'm Myra",
@@ -408,54 +408,43 @@ fun HomeTabContent(
                 color = GoldPrimary
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // VIP Large Character (Girl) with Soft Glowing Halo and Floating Animation
+            // VIP Large Uncropped Girl Character (myra_logo.png) with Soft Glowing Halo and Gentle Floating Animation
             Box(
                 modifier = Modifier
                     .offset(y = floatOffsetY.dp)
-                    .size(170.dp),
+                    .height(200.dp)
+                    .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                // Soft glow background halo
+                // Soft purple and gold glowing aura behind the character
                 Box(
                     modifier = Modifier
                         .scale(glowScale)
-                        .size(160.dp)
+                        .size(210.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
                                     GoldPrimary.copy(alpha = 0.35f),
-                                    PrimaryPurple.copy(alpha = 0.25f),
+                                    PrimaryPurple.copy(alpha = 0.30f),
+                                    VioletAccent.copy(alpha = 0.15f),
                                     Color.Transparent
                                 )
                             )
                         )
                 )
 
-                // Glass Ring Frame with Gold Border
-                Box(
+                // Uncropped Girl Character Image
+                Image(
+                    painter = painterResource(id = R.drawable.myra_logo),
+                    contentDescription = "Myra Girl Character",
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .size(150.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(GoldPrimary, PrimaryPurple, VioletAccent)
-                            )
-                        )
-                        .padding(2.5.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.myra_logo),
-                        contentDescription = "Myra Character",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                    )
-                }
+                        .height(195.dp)
+                        .wrapContentWidth()
+                )
             }
         }
 
@@ -594,13 +583,23 @@ fun HomeTabContent(
 
         // Glowing Pulse Animation for Mic Button
         val micPulseScale by infiniteTransition.animateFloat(
-            initialValue = if (isListening) 1.0f else 1.0f,
-            targetValue = if (isListening) 1.25f else 1.05f,
+            initialValue = 1.0f,
+            targetValue = if (isListening) 1.35f else 1.08f,
             animationSpec = infiniteRepeatable(
-                animation = tween(800, easing = FastOutSlowInEasing),
+                animation = tween(if (isListening) 600 else 1800, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse
             ),
             label = "micPulseScale"
+        )
+
+        val micGlowAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = if (isListening) 0.85f else 0.45f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(if (isListening) 600 else 1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "micGlowAlpha"
         )
 
         Box(
@@ -609,41 +608,29 @@ fun HomeTabContent(
                 .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Pulse outer glow when listening
-            if (isListening) {
-                Box(
-                    modifier = Modifier
-                        .scale(micPulseScale)
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    ErrorRed.copy(alpha = 0.6f),
-                                    Color.Transparent
-                                )
+            // Pulse outer glow halo behind mic button
+            Box(
+                modifier = Modifier
+                    .scale(micPulseScale)
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = if (isListening) listOf(
+                                ErrorRed.copy(alpha = micGlowAlpha),
+                                PrimaryPurple.copy(alpha = micGlowAlpha * 0.5f),
+                                Color.Transparent
+                            ) else listOf(
+                                GoldPrimary.copy(alpha = micGlowAlpha),
+                                PrimaryPurple.copy(alpha = micGlowAlpha * 0.4f),
+                                Color.Transparent
                             )
                         )
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .scale(micPulseScale)
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    GoldPrimary.copy(alpha = 0.25f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-            }
+                    )
+            )
 
             val micGradient = if (isListening) {
-                listOf(Color(0xFFEF4444), Color(0xFFDC2626))
+                listOf(Color(0xFFEF4444), Color(0xFFB91C1C))
             } else {
                 listOf(GoldPrimary, PrimaryPurple)
             }
@@ -655,14 +642,15 @@ fun HomeTabContent(
                 },
                 modifier = Modifier
                     .size(74.dp)
-                    .shadow(8.dp, CircleShape)
+                    .shadow(10.dp, CircleShape)
                     .clip(CircleShape)
                     .background(Brush.linearGradient(micGradient))
+                    .border(1.5.dp, GoldLight.copy(alpha = 0.6f), CircleShape)
             ) {
                 Icon(
                     imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
                     contentDescription = "Voice Command",
-                    tint = if (isListening) Color.White else Color.Black,
+                    tint = Color.White,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -1004,47 +992,52 @@ fun AgentCardItem(
 @Composable
 fun ThinkingIndicatorItem() {
     val infiniteTransition = rememberInfiniteTransition(label = "thinking_dots")
-    val alphaAnim by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
+    val dot1Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
+            animation = tween(600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "alphaAnim"
+        label = "dot1Alpha"
     )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(animationSpec = tween(300)) + slideInVertically(initialOffsetY = { 20 })
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        Row(
             modifier = Modifier
-                .widthIn(max = 280.dp)
-                .shadow(4.dp, RoundedCornerShape(20.dp))
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Surface(
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .shadow(4.dp, RoundedCornerShape(20.dp))
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = GoldPrimary
-                )
-                Text(
-                    text = "Myra is thinking...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = GoldPrimary.copy(alpha = alphaAnim)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.myra_avatar),
+                        contentDescription = "Myra Orb Avatar",
+                        modifier = Modifier.size(20.dp).clip(CircleShape)
+                    )
+                    Text(
+                        text = "Myra is thinking...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldPrimary.copy(alpha = dot1Alpha)
+                    )
+                }
             }
         }
     }
@@ -1056,128 +1049,133 @@ fun ChatMessageItem(msg: ChatMessage) {
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val clipboardManager = LocalClipboardManager.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalAlignment = alignment
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(animationSpec = tween(280)) + slideInVertically(initialOffsetY = { if (isUser) 18 else -18 })
     ) {
-        if (isUser) {
-            // User Chat Bubble: Rich Purple / Gold Gradient Glass Bubble
-            Box(
-                modifier = Modifier
-                    .widthIn(max = 290.dp)
-                    .shadow(6.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 4.dp))
-                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 4.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(PrimaryPurpleVariant, PrimaryPurple, VioletAccent)
-                        )
-                    )
-                    .border(
-                        1.dp,
-                        Brush.linearGradient(listOf(GoldPrimary.copy(alpha = 0.5f), Color.Transparent)),
-                        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 4.dp)
-                    )
-                    .padding(14.dp)
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "You",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldLight
-                        )
-                        IconButton(
-                            onClick = { clipboardManager.setText(AnnotatedString(msg.text)) },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copy message",
-                                tint = GoldLight.copy(alpha = 0.8f),
-                                modifier = Modifier.size(14.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp),
+            horizontalAlignment = alignment
+        ) {
+            if (isUser) {
+                // User Chat Bubble: Rich Violet Gradient Glass Bubble with Thin Gold Accents
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 295.dp)
+                        .shadow(6.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 4.dp))
+                        .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 4.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(PrimaryPurpleVariant, PrimaryPurple, VioletAccent)
                             )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SelectionContainer {
-                        Text(
-                            text = msg.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White
                         )
-                    }
-                }
-            }
-        } else {
-            // Myra Response Bubble: Soft Translucent Glass Card with Gold / Violet Accent Border
-            Surface(
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp),
-                color = if (msg.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (msg.isError) ErrorRed else MaterialTheme.colorScheme.outline
-                ),
-                modifier = Modifier
-                    .widthIn(max = 290.dp)
-                    .shadow(4.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp))
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        .border(
+                            1.dp,
+                            Brush.linearGradient(listOf(GoldPrimary.copy(alpha = 0.6f), VioletAccent.copy(alpha = 0.3f))),
+                            RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 4.dp)
+                        )
+                        .padding(14.dp)
+                ) {
+                    Column {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.myra_avatar),
-                                contentDescription = "Myra",
-                                modifier = Modifier.size(18.dp).clip(CircleShape)
-                            )
                             Text(
-                                text = "Myra",
+                                text = "You",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else GoldPrimary
+                                color = GoldLight
+                            )
+                            IconButton(
+                                onClick = { clipboardManager.setText(AnnotatedString(msg.text)) },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy message",
+                                    tint = GoldLight.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SelectionContainer {
+                            Text(
+                                text = msg.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
                             )
                         }
-                        IconButton(
-                            onClick = { clipboardManager.setText(AnnotatedString(msg.text)) },
-                            modifier = Modifier.size(20.dp)
+                    }
+                }
+            } else {
+                // Myra Response Bubble: Translucent Glass Card with Thin Gold or Violet Border
+                Surface(
+                    shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 4.dp, bottomEnd = 22.dp),
+                    color = if (msg.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (msg.isError) ErrorRed else MaterialTheme.colorScheme.outline
+                    ),
+                    modifier = Modifier
+                        .widthIn(max = 295.dp)
+                        .shadow(4.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 4.dp, bottomEnd = 22.dp))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copy message",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.myra_avatar),
+                                    contentDescription = "Myra",
+                                    modifier = Modifier.size(18.dp).clip(CircleShape)
+                                )
+                                Text(
+                                    text = "Myra",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else GoldPrimary
+                                )
+                            }
+                            IconButton(
+                                onClick = { clipboardManager.setText(AnnotatedString(msg.text)) },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy message",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SelectionContainer {
+                            Text(
+                                text = msg.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    SelectionContainer {
-                        Text(
-                            text = msg.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    if (!msg.providerInfo.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = msg.providerInfo,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
+                        if (!msg.providerInfo.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = msg.providerInfo,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }
