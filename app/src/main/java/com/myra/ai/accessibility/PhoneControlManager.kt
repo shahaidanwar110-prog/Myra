@@ -340,7 +340,47 @@ class PhoneControlManager(private val context: Context) {
         }
     }
 
+    suspend fun postInstagramComment(commentText: String): Result<String> {
+        val openResult = openAppByName("Instagram")
+        if (openResult.isFailure) return openResult
+
+        kotlinx.coroutines.delay(1500L)
+
+        val service = MyraAccessibilityService.getInstance()
+            ?: return Result.failure(Exception("Accessibility service is disabled. Enable Myra in Accessibility Settings."))
+
+        // Try clicking comment button / input field
+        val commentClicked = service.clickText("Add a comment...") ||
+                service.clickText("Comment") ||
+                service.clickText("Comments")
+
+        if (commentClicked) {
+            kotlinx.coroutines.delay(800L)
+            service.typeText(commentText)
+            kotlinx.coroutines.delay(500L)
+            val posted = service.clickText("Post") || service.clickSendButton()
+            return if (posted) {
+                Result.success("Posted comment on Instagram: \"$commentText\"")
+            } else {
+                Result.success("Typed comment \"$commentText\" in Instagram. Tap Post to publish.")
+            }
+        } else {
+            // Direct type if input field focused
+            val typed = service.typeText(commentText)
+            return if (typed) {
+                service.clickText("Post")
+                Result.success("Typed and posted comment: \"$commentText\".")
+            } else {
+                Result.failure(Exception("Could not locate Instagram comment field on active screen."))
+            }
+        }
+    }
+
     suspend fun postToSocialPlatform(platform: String, captionAndHashtags: String): Result<String> {
+        if (platform.contains("Instagram", ignoreCase = true)) {
+            return postInstagramComment(captionAndHashtags)
+        }
+
         val openResult = openAppByName(platform)
         if (openResult.isFailure) {
             return openResult
@@ -361,9 +401,6 @@ class PhoneControlManager(private val context: Context) {
             }
             platform.contains("Facebook", ignoreCase = true) -> {
                 service.clickText("What's on your mind?") || service.clickText("Create post") || service.clickText("Post")
-            }
-            platform.contains("Instagram", ignoreCase = true) -> {
-                service.clickText("New post") || service.clickText("Write a caption") || service.clickText("+")
             }
             else -> false
         }
