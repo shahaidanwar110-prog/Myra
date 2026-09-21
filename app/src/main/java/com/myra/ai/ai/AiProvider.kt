@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.util.Base64
 import com.myra.ai.data.SecureStorage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,8 +40,8 @@ internal fun executeSingleHttpPost(
             requestMethod = "POST"
             doOutput = true
             doInput = true
-            connectTimeout = 30000
-            readTimeout = 30000
+            connectTimeout = 15000
+            readTimeout = 15000
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
 
@@ -82,17 +84,50 @@ internal fun executeSingleHttpPost(
     }
 }
 
+internal suspend fun httpGetRequest(
+    urlString: String,
+    headers: Map<String, String>
+): Result<String> = withContext(Dispatchers.IO) {
+    try {
+        val url = URL(urlString)
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            doInput = true
+            connectTimeout = 15000
+            readTimeout = 15000
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
+        }
+
+        val statusCode = connection.responseCode
+        val inputStream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
+        val response = if (inputStream != null) {
+            BufferedReader(InputStreamReader(inputStream, "UTF-8")).use { it.readText() }
+        } else ""
+
+        if (statusCode in 200..299) {
+            Result.success(response)
+        } else {
+            Result.failure(Exception("HTTP $statusCode: $response"))
+        }
+    } catch (e: Exception) {
+        Result.failure(Exception("Network error: ${e.localizedMessage ?: e.message}"))
+    }
+}
+
 internal suspend fun httpPostRequest(
     urlString: String,
     headers: Map<String, String>,
     bodyJson: String,
-    maxRetries: Int = 3,
+    maxRetries: Int = 1,
     delayMs: Long = 1000L
 ): Result<String> = withContext(Dispatchers.IO) {
     var attempts = 0
     while (true) {
         val (statusCode, result) = executeSingleHttpPost(urlString, headers, bodyJson)
         if (result.isSuccess) {
+            return@withContext result
+        }
+        if (statusCode == 429) {
             return@withContext result
         }
         if (statusCode == 503 && attempts < maxRetries) {
@@ -473,7 +508,76 @@ class OpenRouterProvider(
     }
 }
 
+class RateLimiter {
+    private val rateLimitMutex = Mutex()
+    private val inFlightMutex = Mutex()
+    private val requestTimestamps = mutableMapOf<String, MutableList<Long>>()
+
+    suspend fun <T> runWithRateLimit(
+        providerName: String,
+        onWaitingNotice: ((String) -> Unit)? = null,
+        block: suspend () -> Result<T>
+    ): Result<T> {
+        return inFlightMutex.withLock {
+            rateLimitMutex.withLock {
+                val now = System.currentTimeMillis()
+                val timestamps = requestTimestamps.getOrPut(providerName) { mutableListOf() }
+
+                // Keep only timestamps within the last 60 seconds
+                timestamps.removeAll { now - it >= 60_000L }
+
+                if (timestamps.size >= 4) {
+                    val oldestInWindow = timestamps.first()
+                    val waitMs = 60_000L - (now - oldestInWindow)
+                    if (waitMs > 0) {
+                        val waitSeconds = (waitMs / 1000L).coerceAtLeast(1L)
+                        onWaitingNotice?.invoke("Waiting for provider quota ($waitSeconds seconds)")
+                        kotlinx.coroutines.delay(waitMs)
+                    }
+                }
+
+                // Record current request time
+                requestTimestamps.getOrPut(providerName) { mutableListOf() }.add(System.currentTimeMillis())
+            }
+            block()
+        }
+    }
+}
+
 open class AiProviderManager(private val secureStorage: SecureStorage) {
+
+    private val rateLimiter = RateLimiter()
+    var onQuotaWaitListener: ((String) -> Unit)? = null
+
+    suspend fun fetchModels(providerName: String): Result<List<String>> {
+        val apiKey = secureStorage.getApiKey(providerName)
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("$providerName API key is missing."))
+        }
+
+        val url = when (providerName) {
+            SecureStorage.PROVIDER_GROQ -> "https://api.groq.com/openai/v1/models"
+            SecureStorage.PROVIDER_OPENROUTER -> "https://openrouter.ai/api/v1/models"
+            else -> return Result.failure(Exception("Fetching models is only supported for Groq and OpenRouter."))
+        }
+
+        val headers = mapOf(
+            "Authorization" to "Bearer $apiKey"
+        )
+
+        val res = httpGetRequest(url, headers)
+        return res.mapCatching { json ->
+            val obj = JSONObject(json)
+            val data = obj.getJSONArray("data")
+            val modelList = mutableListOf<String>()
+            for (i in 0 until data.length()) {
+                val modelObj = data.getJSONObject(i)
+                val id = modelObj.optString("id")
+                if (id.isNotBlank()) modelList.add(id)
+            }
+            modelList
+        }
+    }
 
     fun getProvider(providerName: String): AiProvider {
         val apiKey = secureStorage.getApiKey(providerName)
@@ -495,7 +599,9 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
         val primaryName = secureStorage.getActiveProvider()
         val primaryProvider = getProvider(primaryName)
 
-        val primaryResult = primaryProvider.generateText(prompt, systemPrompt)
+        val primaryResult = rateLimiter.runWithRateLimit(primaryName, onQuotaWaitListener) {
+            primaryProvider.generateText(prompt, systemPrompt)
+        }
         if (primaryResult.isSuccess) {
             return primaryResult
         }
@@ -515,7 +621,9 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
 
         for (fallbackName in configuredFallbacks) {
             val fallbackProvider = getProvider(fallbackName)
-            val fallbackResult = fallbackProvider.generateText(prompt, systemPrompt)
+            val fallbackResult = rateLimiter.runWithRateLimit(fallbackName, onQuotaWaitListener) {
+                fallbackProvider.generateText(prompt, systemPrompt)
+            }
             if (fallbackResult.isSuccess) {
                 return fallbackResult
             }
@@ -529,7 +637,9 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
         val primaryName = secureStorage.getActiveProvider()
         val primaryProvider = getProvider(primaryName)
 
-        val primaryResult = primaryProvider.describeScreen(image, screenTreeText, prompt)
+        val primaryResult = rateLimiter.runWithRateLimit(primaryName, onQuotaWaitListener) {
+            primaryProvider.describeScreen(image, screenTreeText, prompt)
+        }
         if (primaryResult.isSuccess) {
             return primaryResult
         }
@@ -548,7 +658,9 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
 
         for (fallbackName in configuredFallbacks) {
             val fallbackProvider = getProvider(fallbackName)
-            val fallbackResult = fallbackProvider.describeScreen(image, screenTreeText, prompt)
+            val fallbackResult = rateLimiter.runWithRateLimit(fallbackName, onQuotaWaitListener) {
+                fallbackProvider.describeScreen(image, screenTreeText, prompt)
+            }
             if (fallbackResult.isSuccess) {
                 return fallbackResult
             }

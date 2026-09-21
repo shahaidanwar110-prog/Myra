@@ -137,6 +137,7 @@ fun MainAppStructure(
                     Triple("task_log", "Task Log", Icons.Default.History),
                     Triple("code_mode", "Website / Coding", Icons.Default.Code),
                     Triple("guide", "Guide Mode", Icons.Default.CompassCalibration),
+                    Triple("diagnostics", "Diagnostics", Icons.Default.BugReport),
                     Triple("settings", "Settings", Icons.Default.Settings),
                     Triple("permissions", "Permissions", Icons.Default.Security)
                 )
@@ -198,6 +199,7 @@ fun MainAppStructure(
                                 "agents" -> "Agent Orchestrator"
                                 "task_log" -> "Task Execution Log"
                                 "code_mode" -> "Website & App Coder"
+                                "diagnostics" -> "Diagnostics"
                                 "settings" -> "Settings"
                                 "permissions" -> "Permissions"
                                 else -> "Myra AI"

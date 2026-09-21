@@ -53,17 +53,45 @@ class AgentOrchestrator(
 
         val taskJob = scope.launch {
             updateTaskStatus(taskId, AgentStatus.QUEUED)
-            maxParallelSemaphore.acquire()
+            var acquiredSemaphore = false
             try {
+                // 20 second queue timeout
+                withTimeout(20_000L) {
+                    maxParallelSemaphore.acquire()
+                    acquiredSemaphore = true
+                }
+
                 if (type == AgentType.PHONE) {
-                    uiLock.withLock {
+                    var acquiredUiLock = false
+                    try {
+                        withTimeout(20_000L) {
+                            uiLock.lock()
+                            acquiredUiLock = true
+                        }
                         executeTask(taskId, block)
+                    } finally {
+                        if (acquiredUiLock) {
+                            uiLock.unlock()
+                        }
                     }
                 } else {
                     executeTask(taskId, block)
                 }
+            } catch (e: TimeoutCancellationException) {
+                val reason = "Task queued for too long (>20s timeout)"
+                com.myra.ai.util.DiagnosticsHelper.lastError = reason
+                updateTaskStatus(taskId, AgentStatus.FAILED, errorMessage = reason)
+            } catch (e: CancellationException) {
+                updateTaskStatus(taskId, AgentStatus.CANCELLED)
+                throw e
+            } catch (e: Exception) {
+                val reason = e.localizedMessage ?: "Agent task error"
+                com.myra.ai.util.DiagnosticsHelper.lastError = reason
+                updateTaskStatus(taskId, AgentStatus.FAILED, errorMessage = reason)
             } finally {
-                maxParallelSemaphore.release()
+                if (acquiredSemaphore) {
+                    maxParallelSemaphore.release()
+                }
             }
         }
 
@@ -82,7 +110,7 @@ class AgentOrchestrator(
 
     private suspend fun executeTask(taskId: String, block: suspend () -> Unit) {
         val task = _tasks.value.find { it.id == taskId } ?: return
-        if (task.status == AgentStatus.CANCELLED) return
+        if (task.status == AgentStatus.CANCELLED || task.status == AgentStatus.FAILED) return
 
         updateTaskStatus(taskId, AgentStatus.RUNNING)
         try {
@@ -92,7 +120,9 @@ class AgentOrchestrator(
             updateTaskStatus(taskId, AgentStatus.CANCELLED)
             throw e
         } catch (e: Exception) {
-            updateTaskStatus(taskId, AgentStatus.FAILED, errorMessage = e.localizedMessage ?: "Agent task failed")
+            val reason = e.localizedMessage ?: "Agent task failed"
+            com.myra.ai.util.DiagnosticsHelper.lastError = reason
+            updateTaskStatus(taskId, AgentStatus.FAILED, errorMessage = reason)
         }
     }
 

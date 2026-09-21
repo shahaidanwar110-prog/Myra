@@ -179,6 +179,11 @@ class MainActivity : ComponentActivity() {
                                     onBack = { currentScreen = "settings" }
                                 )
                             }
+                            "diagnostics" -> {
+                                DiagnosticsScreen(
+                                    onBack = { currentScreen = "home" }
+                                )
+                            }
                             "task_log" -> {
                                 TaskLogScreen(
                                     appDatabase = appDatabase,
@@ -358,10 +363,11 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val isSpecialTask = trimmedPrompt.contains("website", ignoreCase = true) ||
+        val isCoderRequest = trimmedPrompt.contains("website", ignoreCase = true) ||
                 trimmedPrompt.contains("build app", ignoreCase = true) ||
-                trimmedPrompt.contains("create app", ignoreCase = true) ||
-                trimmedPrompt.contains("guide", ignoreCase = true) ||
+                trimmedPrompt.contains("create app", ignoreCase = true)
+
+        val isScreenOrOverlayTask = trimmedPrompt.contains("guide", ignoreCase = true) ||
                 trimmedPrompt.contains("show me where to tap", ignoreCase = true) ||
                 trimmedPrompt.contains("where to click", ignoreCase = true) ||
                 trimmedPrompt.contains("watch video", ignoreCase = true) ||
@@ -372,8 +378,18 @@ class MainActivity : ComponentActivity() {
                 trimmedPrompt.equals("screen", ignoreCase = true) ||
                 trimmedPrompt.contains("screenshot", ignoreCase = true)
 
-        if (!isSpecialTask) {
-            // Standard user conversation or phone command -> handled by chatViewModel
+        if (isScreenOrOverlayTask) {
+            // Start overlay service directly without an AI call and without Phone Agent queue
+            com.myra.ai.accessibility.OverlayForegroundService.start(this)
+            chatViewModel.addMessage(ChatMessage("User", trimmedPrompt))
+            currentTaskJob = lifecycleScope.launch {
+                runTaskInternal(trimmedPrompt, prompt, isCoderRequest = false)
+            }
+            return
+        }
+
+        if (!isCoderRequest) {
+            // Standard user conversation or phone command -> handled by chatViewModel directly
             chatViewModel.sendMessage(prompt) { action, callback ->
                 showConfirmationDialogForAction(action, callback)
             }
@@ -382,20 +398,13 @@ class MainActivity : ComponentActivity() {
 
         chatViewModel.addMessage(ChatMessage("User", trimmedPrompt))
 
-        val isCoderRequest = trimmedPrompt.contains("website", ignoreCase = true) ||
-                trimmedPrompt.contains("build app", ignoreCase = true) ||
-                trimmedPrompt.contains("create app", ignoreCase = true)
-
-        val agentType = if (isCoderRequest) AgentType.CODER else AgentType.PHONE
-        val agentName = if (isCoderRequest) "Coder Agent" else "Phone Agent"
-
-        // Delegate to AgentOrchestrator for multi-agent scheduling
+        // Coder requests go through AgentOrchestrator
         agentOrchestrator.runAgentTask(
-            type = agentType,
-            name = agentName,
+            type = AgentType.CODER,
+            name = "Coder Agent",
             description = trimmedPrompt
         ) {
-            runTaskInternal(trimmedPrompt, prompt, isCoderRequest)
+            runTaskInternal(trimmedPrompt, prompt, isCoderRequest = true)
         }
     }
 

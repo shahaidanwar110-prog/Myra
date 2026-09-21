@@ -37,7 +37,7 @@ class AiProviderTest {
 
     @Test
     fun testGeminiProviderDefaultModelConstant() {
-        assertEquals("gemini-2.5-flash", SecureStorage.DEFAULT_GEMINI_MODEL)
+        assertEquals("gemini-3.5-flash-lite", SecureStorage.DEFAULT_GEMINI_MODEL)
     }
 
     @Test

@@ -63,7 +63,10 @@ open class SecureStorage(context: Context) {
     }
 
     open fun getActiveProvider(): String {
-        return sharedPreferences.getString(KEY_ACTIVE_PROVIDER, PROVIDER_GEMINI) ?: PROVIDER_GEMINI
+        val stored = sharedPreferences.getString(KEY_ACTIVE_PROVIDER, null)
+        if (stored != null) return stored
+        val groqKey = getApiKey(PROVIDER_GROQ)
+        return if (groqKey.isNotBlank()) PROVIDER_GROQ else PROVIDER_GEMINI
     }
 
     fun saveLanguage(languageCode: String) {
@@ -177,7 +180,7 @@ open class SecureStorage(context: Context) {
         const val PROVIDER_GROQ = "Groq"
         const val PROVIDER_OPENROUTER = "OpenRouter"
 
-        const val DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+        const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
         const val DEFAULT_OPENAI_MODEL = "gpt-4o"
         const val DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
         const val DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
