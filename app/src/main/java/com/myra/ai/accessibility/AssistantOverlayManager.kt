@@ -77,11 +77,75 @@ class FloatingOrbView(context: Context) : View(context) {
         animator.cancel()
     }
 
+    private val agslOrbShaderString = """
+        uniform vec2 iResolution;
+        uniform float iTime;
+        uniform float iPulse;
+
+        half4 main(in vec2 fragCoord) {
+            vec2 uv = (fragCoord - 0.5 * iResolution) / min(iResolution.x, iResolution.y);
+            float r = length(uv);
+
+            if (r > 0.48) {
+                float edgeAlpha = smoothstep(0.50, 0.48, r);
+                return half4(0.0, 0.0, 0.0, edgeAlpha * 0.05);
+            }
+
+            // 3D Sphere Normal & Depth
+            float z = sqrt(0.25 - r * r);
+            vec3 normal = normalize(vec3(uv.x, uv.y, z));
+
+            float angle = iTime * 0.4;
+            mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+            vec2 rotUV = rot * uv;
+
+            float t = iTime * 1.2;
+            float plasma1 = sin(rotUV.x * 10.0 + t) + cos(rotUV.y * 10.0 - t);
+            float plasma2 = sin((rotUV.x + rotUV.y) * 8.0 + t * 1.4);
+
+            vec3 purple = vec3(0.48, 0.22, 0.92);
+            vec3 cyan   = vec3(0.0, 0.83, 1.0);
+            vec3 pink   = vec3(0.92, 0.22, 0.65);
+            vec3 gold   = vec3(1.0, 0.84, 0.0);
+            vec3 green  = vec3(0.06, 0.72, 0.51);
+
+            float factor1 = 0.5 + 0.5 * plasma1;
+            float factor2 = 0.5 + 0.5 * plasma2;
+
+            vec3 col = mix(mix(purple, cyan, factor1), mix(pink, mix(gold, green, factor2), sin(t * 0.8) * 0.5 + 0.5), factor2);
+
+            float rim = pow(1.0 - max(0.0, normal.z), 2.5);
+            vec3 rimColor = mix(cyan, gold, sin(iTime) * 0.5 + 0.5) * rim * 1.8;
+
+            vec3 lightDir = normalize(vec3(cos(iTime * 0.8) * 0.6 - 0.3, sin(iTime * 0.6) * 0.6 - 0.4, 0.8));
+            vec3 viewDir = vec3(0.0, 0.0, 1.0);
+            vec3 reflectDir = reflect(-lightDir, normal);
+            float spec = pow(max(0.0, dot(viewDir, reflectDir)), 20.0);
+            vec3 specColor = vec3(1.0, 0.98, 0.9) * spec * 1.4;
+
+            vec3 finalCol = col * 0.85 + rimColor + specColor;
+            float alpha = smoothstep(0.48, 0.44, r);
+            return half4(finalCol * alpha * iPulse, alpha * 0.95 * iPulse);
+        }
+    """.trimIndent()
+
+    private var orbRuntimeShader: Any? = null
+
+    init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                orbRuntimeShader = RuntimeShader(agslOrbShaderString)
+            } catch (e: Exception) {
+                orbRuntimeShader = null
+            }
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val cx = width / 2f
         val cy = height / 2f
-        val baseRadius = (width.coerceAtMost(height) / 2f) - 16f
+        val baseRadius = (width.coerceAtMost(height) / 2f) - 12f
         if (baseRadius <= 0) return
 
         val glowColor1 = when (currentState) {
@@ -98,42 +162,50 @@ class FloatingOrbView(context: Context) : View(context) {
             OrbState.IDLE -> Color.parseColor("#40FFD700")
         }
 
-        // Soft radial glow background
+        // Outer radial glow halo
         val glowRadius = baseRadius * pulseRadius
         glowPaint.shader = RadialGradient(
             cx, cy, glowRadius.coerceAtLeast(1f),
-            intArrayOf(
-                glowColor1,
-                glowColor2,
-                Color.TRANSPARENT
-            ),
+            intArrayOf(glowColor1, glowColor2, Color.TRANSPARENT),
             floatArrayOf(0f, 0.6f, 1f),
             Shader.TileMode.CLAMP
         )
         canvas.drawCircle(cx, cy, glowRadius, glowPaint)
 
-        // Avatar circle
-        val bmp = avatarBitmap
-        if (bmp != null) {
-            val srcRect = Rect(0, 0, bmp.width, bmp.height)
-            val destRect = RectF(cx - baseRadius, cy - baseRadius, cx + baseRadius, cy + baseRadius)
-
-            val path = Path().apply {
-                addCircle(cx, cy, baseRadius, Path.Direction.CW)
+        // Draw 3D AGSL Orb or Layered Fallback
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && orbRuntimeShader != null) {
+            try {
+                val shader = orbRuntimeShader as RuntimeShader
+                shader.setFloatUniform("iResolution", w, h)
+                shader.setFloatUniform("iTime", (System.currentTimeMillis() % 100000) / 1000f)
+                shader.setFloatUniform("iPulse", pulseRadius)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    this.shader = shader
+                }
+                canvas.drawCircle(cx, cy, baseRadius, paint)
+                return
+            } catch (e: Exception) {
+                // Fallback
             }
-            canvas.save()
-            canvas.clipPath(path)
-            canvas.drawBitmap(bmp, srcRect, destRect, null)
-            canvas.restore()
-        } else {
-            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#7C3AED")
-                style = Paint.Style.FILL
-            }
-            canvas.drawCircle(cx, cy, baseRadius, fillPaint)
         }
 
-        // Border
+        // Fallback for older versions
+        val plasmaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = RadialGradient(
+                cx - baseRadius * 0.2f, cy - baseRadius * 0.2f, baseRadius * 1.2f,
+                intArrayOf(
+                    Color.parseColor("#06B6D4"),
+                    Color.parseColor("#7C3AED"),
+                    Color.parseColor("#EC4899"),
+                    Color.parseColor("#FFD700")
+                ),
+                floatArrayOf(0f, 0.4f, 0.7f, 1f),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawCircle(cx, cy, baseRadius, plasmaPaint)
         canvas.drawCircle(cx, cy, baseRadius, borderPaint)
     }
 }
@@ -306,8 +378,14 @@ object AssistantOverlayManager {
             wm.addView(edgeView, edgeParams)
             edgeLightingView = edgeView
 
-            // 2. Floating orb overlay (draggable)
-            val orbSize = (72 * context.resources.displayMetrics.density).toInt()
+            // 2. Floating orb overlay (draggable) with size setting (Small 100dp, Medium 130dp, Large 160dp default)
+            val storage = com.myra.ai.data.SecureStorage(context)
+            val orbDp = when (storage.getOrbSize()) {
+                "small" -> 100
+                "medium" -> 130
+                else -> 160
+            }
+            val orbSize = (orbDp * context.resources.displayMetrics.density).toInt()
             val params = WindowManager.LayoutParams(
                 orbSize,
                 orbSize,

@@ -67,6 +67,9 @@ fun SettingsScreen(
     var personalityStyle by remember { mutableStateOf(secureStorage.getPersonalityStyle()) }
     var languageMix by remember { mutableStateOf(secureStorage.getLanguageMix()) }
 
+    var centerpieceStyle by remember { mutableStateOf(secureStorage.getCenterpieceStyle()) }
+    var overlayOrbSize by remember { mutableStateOf(secureStorage.getOrbSize()) }
+
     var ttsPitch by remember { mutableFloatStateOf(secureStorage.getPitch()) }
     var ttsRate by remember { mutableFloatStateOf(secureStorage.getSpeechRate()) }
     var selectedVoiceName by remember { mutableStateOf(secureStorage.getSelectedVoice()) }
@@ -537,6 +540,68 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            Text("Home Centerpiece & Overlay Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+            Text("Home Centerpiece Style", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = centerpieceStyle == "orb",
+                    onClick = {
+                        centerpieceStyle = "orb"
+                        secureStorage.saveCenterpieceStyle("orb")
+                    },
+                    label = { Text("3D Glowing Orb (Default)") }
+                )
+                FilterChip(
+                    selected = centerpieceStyle == "girl",
+                    onClick = {
+                        centerpieceStyle = "girl"
+                        secureStorage.saveCenterpieceStyle("girl")
+                    },
+                    label = { Text("Myra Character (Girl)") }
+                )
+            }
+
+            Text("Accessibility Overlay Orb Size", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = overlayOrbSize == "small",
+                    onClick = {
+                        overlayOrbSize = "small"
+                        secureStorage.saveOrbSize("small")
+                    },
+                    label = { Text("Small (100dp)") }
+                )
+                FilterChip(
+                    selected = overlayOrbSize == "medium",
+                    onClick = {
+                        overlayOrbSize = "medium"
+                        secureStorage.saveOrbSize("medium")
+                    },
+                    label = { Text("Medium (130dp)") }
+                )
+                FilterChip(
+                    selected = overlayOrbSize == "large",
+                    onClick = {
+                        overlayOrbSize = "large"
+                        secureStorage.saveOrbSize("large")
+                    },
+                    label = { Text("Large (160dp Default)") }
+                )
+            }
+
+            HorizontalDivider()
+
             Text("Personality & Companion Style", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
             OutlinedTextField(
@@ -932,6 +997,9 @@ fun SettingsScreen(
                     secureStorage.saveUserName(userName)
                     secureStorage.savePersonalityStyle(personalityStyle)
                     secureStorage.saveLanguageMix(languageMix)
+
+                    secureStorage.saveCenterpieceStyle(centerpieceStyle)
+                    secureStorage.saveOrbSize(overlayOrbSize)
 
                     secureStorage.saveExpressiveVoiceEnabled(isExpressiveVoiceEnabled)
                     secureStorage.saveGeminiTtsModel(geminiTtsModel)
