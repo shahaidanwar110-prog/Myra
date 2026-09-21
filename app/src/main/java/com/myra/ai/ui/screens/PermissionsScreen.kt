@@ -5,18 +5,22 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.SettingsAccessibility
@@ -83,6 +87,19 @@ fun PermissionsScreen(
         mutableStateOf(MyraAccessibilityService.isServiceRunning())
     }
 
+    var hasOverlayPermission by remember {
+        mutableStateOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Settings.canDrawOverlays(context) else true)
+    }
+
+    var isIgnoringBatteryOpt by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+            } else true
+        )
+    }
+
     // Refresh status when returning to app foreground
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -104,6 +121,11 @@ fun PermissionsScreen(
                     Manifest.permission.READ_CONTACTS
                 ) == PackageManager.PERMISSION_GRANTED
                 isAccessibilityEnabled = MyraAccessibilityService.isServiceRunning()
+                hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Settings.canDrawOverlays(context) else true
+                isIgnoringBatteryOpt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+                } else true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -234,13 +256,37 @@ fun PermissionsScreen(
                 }
             )
 
+            // Display Over Other Apps (Overlay) Permission Card
+            PermissionCard(
+                title = "Display over other apps",
+                description = "Required for the floating overlay orb and assistant interface on top of other apps.",
+                isGranted = hasOverlayPermission,
+                icon = Icons.Default.Layers,
+                buttonText = if (hasOverlayPermission) "Granted" else "Open Overlay Settings",
+                onButtonClick = {
+                    openOverlaySettings(context)
+                }
+            )
+
+            // Battery Optimization Permission Card
+            PermissionCard(
+                title = "Turn Off Battery Optimization",
+                description = "Required to keep Myra running reliably in background and respond to voice commands.",
+                isGranted = isIgnoringBatteryOpt,
+                icon = Icons.Default.BatterySaver,
+                buttonText = if (isIgnoringBatteryOpt) "Optimized" else "Disable Optimization",
+                onButtonClick = {
+                    openBatteryOptimizationSettings(context)
+                }
+            )
+
             // Accessibility Service Card
             PermissionCard(
                 title = "Accessibility Service",
                 description = "Required to perform actions like opening apps, clicking buttons, scrolling, and entering text.",
                 isGranted = isAccessibilityEnabled,
                 icon = Icons.Default.SettingsAccessibility,
-                buttonText = if (isAccessibilityEnabled) "Enabled" else "Enable in Settings",
+                buttonText = if (isAccessibilityEnabled) "Enabled" else "Open Accessibility Settings",
                 onButtonClick = {
                     openAccessibilitySettings(context)
                 }
@@ -323,6 +369,40 @@ private fun PermissionCard(
                     Text(buttonText)
                 }
             }
+        }
+    }
+}
+
+private fun openOverlaySettings(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+    }
+}
+
+private fun openBatteryOptimizationSettings(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 }

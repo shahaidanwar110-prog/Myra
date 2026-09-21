@@ -53,6 +53,10 @@ fun SettingsScreen(
     var activeProvider by remember { mutableStateOf(secureStorage.getActiveProvider()) }
     var selectedLanguage by remember { mutableStateOf(secureStorage.getLanguage()) }
 
+    var userName by remember { mutableStateOf(secureStorage.getUserName()) }
+    var personalityStyle by remember { mutableStateOf(secureStorage.getPersonalityStyle()) }
+    var languageMix by remember { mutableStateOf(secureStorage.getLanguageMix()) }
+
     var ttsPitch by remember { mutableFloatStateOf(secureStorage.getPitch()) }
     var ttsRate by remember { mutableFloatStateOf(secureStorage.getSpeechRate()) }
     var selectedVoiceName by remember { mutableStateOf(secureStorage.getSelectedVoice()) }
@@ -247,6 +251,52 @@ fun SettingsScreen(
                             color = if (isTestError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
+                }
+            }
+
+            HorizontalDivider()
+
+            Text("Personality & Companion Style", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+            OutlinedTextField(
+                value = userName,
+                onValueChange = { userName = it },
+                label = { Text("Your Name (Myra addresses you by this name)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Text("Personality Style", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val styles = listOf("Friend", "Caring friend", "Professional")
+                styles.forEach { style ->
+                    FilterChip(
+                        selected = personalityStyle == style,
+                        onClick = { personalityStyle = style },
+                        label = { Text(style) }
+                    )
+                }
+            }
+
+            Text("Language Mix Preference", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val mixes = listOf("Urdu/Hindi/English Mix", "English", "Urdu", "Hindi")
+                mixes.forEach { mix ->
+                    FilterChip(
+                        selected = languageMix == mix,
+                        onClick = { languageMix = mix },
+                        label = { Text(mix) }
+                    )
                 }
             }
 
@@ -504,6 +554,10 @@ fun SettingsScreen(
                     secureStorage.saveString("GITHUB_TOKEN", githubToken)
                     secureStorage.saveActiveProvider(activeProvider)
                     secureStorage.saveLanguage(selectedLanguage)
+
+                    secureStorage.saveUserName(userName)
+                    secureStorage.savePersonalityStyle(personalityStyle)
+                    secureStorage.saveLanguageMix(languageMix)
 
                     secureStorage.savePitch(ttsPitch)
                     secureStorage.saveSpeechRate(ttsRate)

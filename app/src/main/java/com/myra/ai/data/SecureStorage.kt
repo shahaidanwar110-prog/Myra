@@ -113,7 +113,37 @@ open class SecureStorage(context: Context) {
         return getString("favorite_voices_json")
     }
 
+    fun saveUserName(name: String) {
+        saveString(KEY_USER_NAME, name)
+    }
+
+    open fun getUserName(): String {
+        val stored = getString(KEY_USER_NAME)
+        return if (stored.isBlank()) "Friend" else stored
+    }
+
+    fun savePersonalityStyle(style: String) {
+        saveString(KEY_PERSONALITY_STYLE, style)
+    }
+
+    open fun getPersonalityStyle(): String {
+        val stored = getString(KEY_PERSONALITY_STYLE)
+        return if (stored.isBlank()) "Caring friend" else stored
+    }
+
+    fun saveLanguageMix(mix: String) {
+        saveString(KEY_LANGUAGE_MIX, mix)
+    }
+
+    open fun getLanguageMix(): String {
+        val stored = getString(KEY_LANGUAGE_MIX)
+        return if (stored.isBlank()) "Urdu/Hindi/English Mix" else stored
+    }
+
     companion object {
+        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_PERSONALITY_STYLE = "personality_style"
+        private const val KEY_LANGUAGE_MIX = "language_mix"
         private const val PREFS_FILENAME = "myra_secure_prefs"
         private const val FALLBACK_PREFS_FILENAME = "myra_fallback_prefs"
         private const val KEY_PREFIX_API = "api_key_"

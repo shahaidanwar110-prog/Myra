@@ -90,16 +90,18 @@ class MainActivity : ComponentActivity() {
             secureStorage = secureStorage,
             aiProviderManager = aiProviderManager,
             phoneControlManager = phoneControlManager,
-            voiceController = voiceController
+            voiceController = voiceController,
+            appDatabase = appDatabase
         )
 
         TaskStopReceiver.onStopTaskRequested = {
             stopCurrentTask()
-            com.myra.ai.accessibility.AssistantOverlayManager.hideOverlay()
+            com.myra.ai.accessibility.OverlayForegroundService.stop(this)
         }
 
         com.myra.ai.accessibility.AssistantOverlayManager.onStopOverlayRequested = {
             stopCurrentTask()
+            com.myra.ai.accessibility.OverlayForegroundService.stop(this)
         }
         com.myra.ai.accessibility.AssistantOverlayManager.onMicClickRequested = {
             requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -175,6 +177,12 @@ class MainActivity : ComponentActivity() {
                             "permissions" -> {
                                 PermissionsScreen(
                                     onBack = { currentScreen = "settings" }
+                                )
+                            }
+                            "task_log" -> {
+                                TaskLogScreen(
+                                    appDatabase = appDatabase,
+                                    onBack = { currentScreen = "home" }
                                 )
                             }
                             "code_mode" -> {
@@ -331,12 +339,22 @@ class MainActivity : ComponentActivity() {
         val trimmedPrompt = prompt.trim()
 
         // Handle direct stop command
-        if (trimmedPrompt.equals("stop", ignoreCase = true)) {
+        if (trimmedPrompt.equals("stop", ignoreCase = true) || trimmedPrompt.equals("stop live mode", ignoreCase = true)) {
             stopCurrentTask()
             agentOrchestrator.cancelAll()
+            voiceController.setLiveMode(false)
+            com.myra.ai.accessibility.OverlayForegroundService.stop(this)
             MyraAccessibilityService.getInstance()?.clearGuideHighlight()
-            chatViewModel.addMessage(ChatMessage("Myra", "Task, video watching and guide overlay stopped."))
-            voiceController.speak("Task stopped.")
+            chatViewModel.addMessage(ChatMessage("Myra", "Stopped all active tasks, live mode, and floating overlay."))
+            voiceController.speak("Task and live mode stopped.")
+            return
+        }
+
+        if (trimmedPrompt.contains("live conversation", ignoreCase = true) || trimmedPrompt.contains("live mode", ignoreCase = true)) {
+            voiceController.setLiveMode(true)
+            val liveMsg = "Live conversation mode activated. I'm listening! Speak after I answer, or say 'stop' anytime."
+            chatViewModel.addMessage(ChatMessage("Myra", liveMsg))
+            voiceController.speak(liveMsg)
             return
         }
 
@@ -533,9 +551,9 @@ class MainActivity : ComponentActivity() {
                     com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $errMsg")
                     voiceController.speak(errMsg)
                 } else {
-                    // Move Myra to background and open floating orb overlay
+                    // Move Myra to background and start stay-on-screen foreground overlay service
                     service.pressHome()
-                    service.showAssistantOverlay()
+                    com.myra.ai.accessibility.OverlayForegroundService.start(this@MainActivity)
 
                     delay(500L) // Brief pause for home transition
 
@@ -667,8 +685,9 @@ class MainActivity : ComponentActivity() {
         isTaskRunningState.value = false
         watchVideoManager.stopWatching()
         MyraAccessibilityService.getInstance()?.clearGuideHighlight()
-        com.myra.ai.accessibility.AssistantOverlayManager.hideOverlay()
+        com.myra.ai.accessibility.OverlayForegroundService.stop(this)
         taskNotificationManager.clearNotification()
+        voiceController.setLiveMode(false)
         voiceController.stopListening()
         if (::agentOrchestrator.isInitialized) {
             agentOrchestrator.cancelAll()
