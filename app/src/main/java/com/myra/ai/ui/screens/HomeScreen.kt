@@ -42,6 +42,8 @@ import com.myra.ai.R
 import com.myra.ai.ai.AgentStatus
 import com.myra.ai.ai.AgentTask
 import com.myra.ai.ai.AgentType
+import com.myra.ai.ui.components.FlowingEdgeLightingContainer
+import com.myra.ai.ui.components.GlowingOrbCenterpiece
 import com.myra.ai.ui.theme.*
 
 data class ChatMessage(
@@ -69,6 +71,7 @@ fun MainAppStructure(
     isSpeaking: Boolean,
     isTaskRunning: Boolean = false,
     isWatchingVideo: Boolean = false,
+    centerpieceStyle: String = "orb",
     onStartListening: () -> Unit,
     onStopListening: () -> Unit,
     onStopTask: () -> Unit = {},
@@ -90,6 +93,10 @@ fun MainAppStructure(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    FlowingEdgeLightingContainer(
+        isListening = isListening,
+        isSpeaking = isSpeaking
+    ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -190,6 +197,7 @@ fun MainAppStructure(
         }
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
                     title = {
@@ -279,6 +287,7 @@ fun MainAppStructure(
                         isSpeaking = isSpeaking,
                         isTaskRunning = isTaskRunning,
                         isWatchingVideo = isWatchingVideo,
+                        centerpieceStyle = centerpieceStyle,
                         onStartListening = onStartListening,
                         onStopListening = onStopListening,
                         onStopTask = onStopTask,
@@ -295,6 +304,7 @@ fun MainAppStructure(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -303,6 +313,7 @@ fun HomeTabContent(
     isSpeaking: Boolean,
     isTaskRunning: Boolean,
     isWatchingVideo: Boolean,
+    centerpieceStyle: String = "orb",
     onStartListening: () -> Unit,
     onStopListening: () -> Unit,
     onStopTask: () -> Unit,
@@ -374,29 +385,9 @@ fun HomeTabContent(
         }
 
         val haptic = LocalHapticFeedback.current
+        val infiniteTransition = rememberInfiniteTransition(label = "mic_transition")
 
-        // Floating animation for Myra character
-        val infiniteTransition = rememberInfiniteTransition(label = "floating_character")
-        val floatOffsetY by infiniteTransition.animateFloat(
-            initialValue = -6f,
-            targetValue = 6f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(2200, easing = LinearOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "floatOffsetY"
-        )
-        val glowScale by infiniteTransition.animateFloat(
-            initialValue = 0.95f,
-            targetValue = 1.08f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "glowScale"
-        )
-
-        // Top Greeting & Avatar Section
+        // Top Greeting & Avatar Centerpiece Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(vertical = 2.dp)
@@ -410,108 +401,11 @@ fun HomeTabContent(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // VIP Large Uncropped Girl Character (myra_logo.png) with Soft Glowing Halo and Gentle Floating Animation
-            Box(
-                modifier = Modifier
-                    .offset(y = floatOffsetY.dp)
-                    .height(200.dp)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                // Soft purple and gold glowing aura behind the character
-                Box(
-                    modifier = Modifier
-                        .scale(glowScale)
-                        .size(210.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    GoldPrimary.copy(alpha = 0.35f),
-                                    PrimaryPurple.copy(alpha = 0.30f),
-                                    VioletAccent.copy(alpha = 0.15f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                // Uncropped Girl Character Image
-                Image(
-                    painter = painterResource(id = R.drawable.myra_logo),
-                    contentDescription = "Myra Girl Character",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .height(195.dp)
-                        .wrapContentWidth()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Quick Action Chips Row
-        Text(
-            text = "Quick Actions",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.Start)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val quickActions = listOf(
-            Triple("Screen", "look at my screen", Icons.Default.PhoneAndroid),
-            Triple("Open app", "Open YouTube", Icons.Default.Apps),
-            Triple("Message", "Send WhatsApp message to John: Hello!", Icons.AutoMirrored.Filled.Comment),
-            Triple("Call", "Call Mum", Icons.Default.Phone),
-            Triple("Watch screen", "Watch video on screen", Icons.Default.Visibility),
-            Triple("Guide me", "Guide me to settings", Icons.Default.Explore),
-            Triple("Post", "Post on Twitter: Having a great day with Myra AI!", Icons.Default.Share)
-        )
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(quickActions) { (actionLabel, actionPrompt, icon) ->
-                Surface(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (actionLabel == "Watch screen") {
-                            onSendMessage("watch video")
-                        } else if (actionLabel == "Guide me") {
-                            onSendMessage("guide me on screen")
-                        } else {
-                            onSendMessage(actionPrompt)
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.shadow(4.dp, RoundedCornerShape(16.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = actionLabel,
-                            tint = GoldPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = actionLabel,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
+            // 3D Glowing Orb Centerpiece (about 60% screen width, pulsing while Myra speaks)
+            GlowingOrbCenterpiece(
+                isSpeaking = isSpeaking,
+                centerpieceStyle = centerpieceStyle
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))

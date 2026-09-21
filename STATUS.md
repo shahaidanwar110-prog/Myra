@@ -1,5 +1,43 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint C: 3D Glowing Orb Centerpiece, Flowing Edge Lighting, Settings & Accessibility Overlay
+- **Status**: Completed & Verified
+- **What Works**:
+  - 3D Glowing Orb Centerpiece (`GlowingOrbCenterpiece.kt`): Rendered a 3D-looking glowing orb centerpiece (~60% screen width) on Home using an AGSL shader on Android 13+ (glossy sphere with bright rim light, swirling colored plasma inside, moving specular highlight, and slow rotation) and a layered rotating-gradient fallback on older versions. It pulses while Myra speaks with rising light bubbles around it.
+  - Settings Avatar Choice & Smooth Blending: Added Centerpiece Style selector in `SettingsScreen.kt` & `SecureStorage.kt` ("Glowing Orb" default vs "Myra Girl Character"), blending the girl image smoothly without a sharp rectangle.
+  - Flowing Edge Lighting (`FlowingEdgeLighting.kt`): Smooth flowing multi-color edge light (purple, cyan, pink, gold, green) running along screen borders in Compose when Myra listens or speaks, stronger while speaking.
+  - Accessibility Overlay Over Other Apps (`AssistantOverlayManager.kt`): Updated floating orb overlay and non-touchable edge lighting with AGSL shader, draggability, and configurable orb size (Small 100dp, Medium 130dp, Large 160dp default).
+  - Animated Splash Open: Enhanced splash screen opening animation with 3D glowing orb centerpiece scaling and glowing on app launch.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/components/GlowingOrbCenterpiece.kt`
+  - `app/src/main/java/com/myra/ai/ui/components/FlowingEdgeLighting.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/AssistantOverlayManager.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
+## Checkpoint B: Animated Wallpaper Across All Screens
+- **Status**: Completed & Verified
+- **What Works**:
+  - Animated Wallpaper Component (`AnimatedWallpaperBackground.kt`): Created reusable background wrapper rendering a deep midnight background gradient (`#090910` to `#06060B`) with slowly drifting multi-color aurora glows (purple `#7C3AED`, cyan `#06B6D4`, pink `#EC4899`, gold `#FFD700`) and soft floating translucent bubbles moving gracefully upward with pulsing opacity.
+  - Repo Root Custom Wallpaper Fallback: Checks for `myra_wallpaper.png` in repo root or device paths (`/sdcard/myra_wallpaper.png`, `/data/local/tmp/myra_wallpaper.png`); if present, renders it behind a subtle translucent midnight overlay filter.
+  - App-Wide Seamless Integration: Applied `AnimatedWallpaperBackground` at the root of `MainActivity.kt` and transparent scaffold backgrounds across all screens (`HomeScreen.kt`, `SettingsScreen.kt`, `DiagnosticsScreen.kt`, etc.).
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/components/AnimatedWallpaper.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `STATUS.md`
+
+## Checkpoint A: Quick Actions Removal
+- **Status**: Completed & Verified
+- **What Works**:
+  - Removed Quick Actions Row: Removed the "Quick Actions" label and horizontal scrolling chip row from `HomeScreen.kt`. All interactions on Home are performed via direct voice command or text input.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `STATUS.md`
+
 ## Checkpoint C: Fetch Models & Provider Default Model Updates
 - **Status**: Completed & Verified
 - **What Works**:

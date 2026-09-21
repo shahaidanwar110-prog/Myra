@@ -40,6 +40,8 @@ import com.myra.ai.notification.TaskNotificationManager
 import com.myra.ai.notification.TaskStopReceiver
 import com.myra.ai.ai.ActionType
 import com.myra.ai.ai.SystemAction
+import com.myra.ai.ui.components.AnimatedWallpaperBackground
+import com.myra.ai.ui.components.GlowingOrbCenterpiece
 import com.myra.ai.ui.screens.*
 import com.myra.ai.ui.theme.MyraTheme
 import com.myra.ai.voice.VoiceController
@@ -116,11 +118,12 @@ class MainActivity : ComponentActivity() {
             var isDarkTheme by remember { mutableStateOf(secureStorage.isDarkTheme()) }
 
             MyraTheme(darkTheme = isDarkTheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    var isSplashScreenActive by remember { mutableStateOf(true) }
+                AnimatedWallpaperBackground {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color.Transparent
+                    ) {
+                        var isSplashScreenActive by remember { mutableStateOf(true) }
                     var isOnboardingCompleted by remember { mutableStateOf(secureStorage.isOnboardingCompleted()) }
                     var currentScreen by remember { mutableStateOf("home") }
 
@@ -258,11 +261,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             else -> {
+                                val centerpieceStyle = remember { secureStorage.getCenterpieceStyle() }
                                 MainAppStructure(
                                     isListening = isListening,
                                     isSpeaking = isSpeaking,
                                     isTaskRunning = isTaskRunning,
                                     isWatchingVideo = isWatchingVideo,
+                                    centerpieceStyle = centerpieceStyle,
                                     onStartListening = {
                                         requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                     },
@@ -304,67 +309,36 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    }
 
     @Composable
     private fun SplashScreenContent() {
-        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "splash_glow")
-        val glowScale by infiniteTransition.animateFloat(
-            initialValue = 0.95f,
-            targetValue = 1.12f,
-            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                animation = androidx.compose.animation.core.tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-            ),
-            label = "glowScale"
+        var startAnim by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            startAnim = true
+        }
+
+        val splashScale by animateFloatAsState(
+            targetValue = if (startAnim) 1.0f else 0.4f,
+            animationSpec = tween(1000, easing = FastOutSlowInEasing),
+            label = "splashScale"
         )
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(
-                            com.myra.ai.ui.theme.DarkBackground,
-                            com.myra.ai.ui.theme.SurfaceDark,
-                            com.myra.ai.ui.theme.DarkBackground
-                        )
-                    )
-                ),
+                .scale(splashScale),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(200.dp)
-                ) {
-                    // Soft glowing aura behind orb avatar logo
-                    Box(
-                        modifier = Modifier
-                            .scale(glowScale)
-                            .size(190.dp)
-                            .clip(CircleShape)
-                            .background(
-                                androidx.compose.ui.graphics.Brush.radialGradient(
-                                    colors = listOf(
-                                        com.myra.ai.ui.theme.GoldPrimary.copy(alpha = 0.4f),
-                                        com.myra.ai.ui.theme.PrimaryPurple.copy(alpha = 0.3f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-
-                    Image(
-                        painter = painterResource(id = R.drawable.myra_avatar),
-                        contentDescription = "Myra Splash Orb Logo",
-                        modifier = Modifier
-                            .size(150.dp)
-                            .clip(CircleShape)
-                    )
-                }
+                GlowingOrbCenterpiece(
+                    isSpeaking = true,
+                    centerpieceStyle = "orb",
+                    modifier = Modifier.size(230.dp)
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 

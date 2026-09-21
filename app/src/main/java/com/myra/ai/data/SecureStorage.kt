@@ -218,10 +218,30 @@ open class SecureStorage(context: Context) {
         return if (stored.isBlank()) "Urdu/Hindi/English Mix" else stored
     }
 
+    fun saveCenterpieceStyle(style: String) {
+        saveString(KEY_CENTERPIECE_STYLE, style)
+    }
+
+    open fun getCenterpieceStyle(): String {
+        val stored = getString(KEY_CENTERPIECE_STYLE)
+        return if (stored.isBlank()) "orb" else stored
+    }
+
+    fun saveOrbSize(size: String) {
+        saveString(KEY_ORB_SIZE, size)
+    }
+
+    open fun getOrbSize(): String {
+        val stored = getString(KEY_ORB_SIZE)
+        return if (stored.isBlank()) "large" else stored
+    }
+
     companion object {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_PERSONALITY_STYLE = "personality_style"
         private const val KEY_LANGUAGE_MIX = "language_mix"
+        private const val KEY_CENTERPIECE_STYLE = "centerpiece_style"
+        private const val KEY_ORB_SIZE = "overlay_orb_size"
         private const val PREFS_FILENAME = "myra_secure_prefs"
         private const val FALLBACK_PREFS_FILENAME = "myra_fallback_prefs"
         private const val KEY_PREFIX_API = "api_key_"
