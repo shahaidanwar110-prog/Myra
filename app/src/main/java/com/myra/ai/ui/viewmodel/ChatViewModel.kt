@@ -71,18 +71,21 @@ class ChatViewModel(
         // 1. Check on-device command parser first
         val localAction = CommandParser.parseCommand(trimmedPrompt)
         if (localAction != null) {
+            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("You: $trimmedPrompt")
             executeParsedAction(localAction, providerInfo = null, onConfirmationRequired = onConfirmationRequired)
             return
         }
 
         // 2. Not an on-device phone command -> Send to active AI provider as conversation
         _isThinking.value = true
+        com.myra.ai.accessibility.AssistantOverlayManager.updateOverlayState(isListening = false, isThinking = true, isSpeaking = false)
         val providerInfoStr = getProviderInfo()
 
         val systemPrompt = com.myra.ai.ai.PersonalityPromptBuilder.buildSystemPrompt(secureStorage)
         val result = aiProviderManager.generateText(trimmedPrompt, systemPrompt)
 
         _isThinking.value = false
+        com.myra.ai.accessibility.AssistantOverlayManager.updateOverlayState(isListening = false, isThinking = false, isSpeaking = false)
 
         result.fold(
             onSuccess = { reply ->
@@ -175,6 +178,7 @@ class ChatViewModel(
         execResult.fold(
             onSuccess = { resultMessage ->
                 addMessage(ChatMessage(sender = "Myra", text = resultMessage, providerInfo = providerInfo))
+                com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $resultMessage")
                 voiceController?.speak(resultMessage)
             },
             onFailure = { err ->
@@ -188,6 +192,7 @@ class ChatViewModel(
                         providerInfo = providerInfo
                     )
                 )
+                com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $errorMsg")
                 voiceController?.speak("Error: $errorMsg")
             }
         )
