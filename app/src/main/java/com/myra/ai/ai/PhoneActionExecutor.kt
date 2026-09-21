@@ -33,7 +33,8 @@ data class SystemAction(
     val caption: String? = null,
     val hashtags: String? = null,
     val steps: List<SystemAction>? = null,
-    val message: String? = null
+    val message: String? = null,
+    val emotion: String? = null
 )
 
 object PhoneActionExecutor {
@@ -139,6 +140,7 @@ object PhoneActionExecutor {
             val platform = extractJsonValue(cleanJson, "platform")
             val caption = extractJsonValue(cleanJson, "caption")
             val hashtags = extractJsonValue(cleanJson, "hashtags")
+            val emotion = extractJsonValue(cleanJson, "emotion")
 
             val actionType = if (actionStr != null) {
                 try {
@@ -158,7 +160,8 @@ object PhoneActionExecutor {
                 platform = platform,
                 caption = caption,
                 hashtags = hashtags,
-                message = if (actionType == ActionType.CHAT_RESPONSE && message == null) cleanJson else message
+                message = if (actionType == ActionType.CHAT_RESPONSE && message == null) cleanJson else message,
+                emotion = emotion
             )
         }
     }
@@ -178,6 +181,7 @@ object PhoneActionExecutor {
         val caption = if (jsonObject.has("caption") && !jsonObject.isNull("caption")) jsonObject.optString("caption") else null
         val hashtags = if (jsonObject.has("hashtags") && !jsonObject.isNull("hashtags")) jsonObject.optString("hashtags") else null
         val message = if (jsonObject.has("message") && !jsonObject.isNull("message")) jsonObject.optString("message") else null
+        val emotion = if (jsonObject.has("emotion") && !jsonObject.isNull("emotion")) jsonObject.optString("emotion") else null
 
         val steps = if (actionType == ActionType.MULTI_STEP && jsonObject.has("steps") && !jsonObject.isNull("steps")) {
             val stepsArray = jsonObject.optJSONArray("steps")
@@ -200,7 +204,8 @@ object PhoneActionExecutor {
             caption = caption,
             hashtags = hashtags,
             steps = steps,
-            message = message
+            message = message,
+            emotion = emotion
         )
     }
 

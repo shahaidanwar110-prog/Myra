@@ -43,10 +43,14 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenPermissions: () -> Unit = {},
     availableVoices: List<VoiceInfo> = emptyList(),
-    onPreviewVoice: (voiceName: String, sampleText: String, pitch: Float, rate: Float) -> Unit = { _, _, _, _ -> }
+    onPreviewVoice: (voiceName: String, sampleText: String, pitch: Float, rate: Float) -> Unit = { _, _, _, _ -> },
+    onPreviewGeminiVoice: (voiceName: String, sampleText: String) -> Unit = { _, _ -> }
 ) {
     var geminiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)) }
     var geminiModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_GEMINI)) }
+    var isExpressiveVoiceEnabled by remember { mutableStateOf(secureStorage.isExpressiveVoiceEnabled()) }
+    var geminiTtsModel by remember { mutableStateOf(secureStorage.getGeminiTtsModel()) }
+    var selectedGeminiVoice by remember { mutableStateOf(secureStorage.getGeminiVoice()) }
     var openAiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_OPENAI)) }
     var openAiModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_OPENAI)) }
     var anthropicKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_ANTHROPIC)) }
@@ -123,14 +127,53 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = geminiModel,
-                onValueChange = { geminiModel = it },
-                label = { Text("Google Gemini Model") },
-                placeholder = { Text("gemini-2.5-flash") },
+            val scope = rememberCoroutineScope()
+            var isFetchingGeminiModels by remember { mutableStateOf(false) }
+            var geminiFetchMsg by remember { mutableStateOf<String?>(null) }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = geminiModel,
+                    onValueChange = { geminiModel = it },
+                    label = { Text("Google Gemini Model") },
+                    placeholder = { Text("gemini-3.5-flash-lite") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            isFetchingGeminiModels = true
+                            geminiFetchMsg = null
+                            secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
+                            val providerManager = AiProviderManager(secureStorage)
+                            val res = providerManager.fetchModels(SecureStorage.PROVIDER_GEMINI)
+                            isFetchingGeminiModels = false
+                            res.onSuccess { models ->
+                                if (models.isNotEmpty()) {
+                                    geminiModel = models.first()
+                                    geminiFetchMsg = "Fetched ${models.size} models. Set to ${models.first()}"
+                                } else {
+                                    geminiFetchMsg = "No models found."
+                                }
+                            }.onFailure { err ->
+                                geminiFetchMsg = "Fetch error: ${err.localizedMessage ?: err.message}"
+                            }
+                        }
+                    },
+                    enabled = !isFetchingGeminiModels
+                ) {
+                    Text(if (isFetchingGeminiModels) "Fetching..." else "Fetch models")
+                }
+            }
+            geminiFetchMsg?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
 
             OutlinedTextField(
                 value = openAiKey,
@@ -142,14 +185,52 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = openAiModel,
-                onValueChange = { openAiModel = it },
-                label = { Text("OpenAI Model") },
-                placeholder = { Text("gpt-4o") },
+            var isFetchingOpenAiModels by remember { mutableStateOf(false) }
+            var openAiFetchMsg by remember { mutableStateOf<String?>(null) }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = openAiModel,
+                    onValueChange = { openAiModel = it },
+                    label = { Text("OpenAI Model") },
+                    placeholder = { Text("gpt-4o") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            isFetchingOpenAiModels = true
+                            openAiFetchMsg = null
+                            secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
+                            val providerManager = AiProviderManager(secureStorage)
+                            val res = providerManager.fetchModels(SecureStorage.PROVIDER_OPENAI)
+                            isFetchingOpenAiModels = false
+                            res.onSuccess { models ->
+                                if (models.isNotEmpty()) {
+                                    openAiModel = models.first()
+                                    openAiFetchMsg = "Fetched ${models.size} models. Set to ${models.first()}"
+                                } else {
+                                    openAiFetchMsg = "No models found."
+                                }
+                            }.onFailure { err ->
+                                openAiFetchMsg = "Fetch error: ${err.localizedMessage ?: err.message}"
+                            }
+                        }
+                    },
+                    enabled = !isFetchingOpenAiModels
+                ) {
+                    Text(if (isFetchingOpenAiModels) "Fetching..." else "Fetch models")
+                }
+            }
+            openAiFetchMsg?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
 
             OutlinedTextField(
                 value = anthropicKey,
@@ -161,14 +242,52 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = anthropicModel,
-                onValueChange = { anthropicModel = it },
-                label = { Text("Anthropic Model") },
-                placeholder = { Text("claude-3-5-sonnet-20241022") },
+            var isFetchingAnthropicModels by remember { mutableStateOf(false) }
+            var anthropicFetchMsg by remember { mutableStateOf<String?>(null) }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = anthropicModel,
+                    onValueChange = { anthropicModel = it },
+                    label = { Text("Anthropic Model") },
+                    placeholder = { Text("claude-sonnet-5") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            isFetchingAnthropicModels = true
+                            anthropicFetchMsg = null
+                            secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
+                            val providerManager = AiProviderManager(secureStorage)
+                            val res = providerManager.fetchModels(SecureStorage.PROVIDER_ANTHROPIC)
+                            isFetchingAnthropicModels = false
+                            res.onSuccess { models ->
+                                if (models.isNotEmpty()) {
+                                    anthropicModel = models.first()
+                                    anthropicFetchMsg = "Fetched ${models.size} models. Set to ${models.first()}"
+                                } else {
+                                    anthropicFetchMsg = "No models found."
+                                }
+                            }.onFailure { err ->
+                                anthropicFetchMsg = "Fetch error: ${err.localizedMessage ?: err.message}"
+                            }
+                        }
+                    },
+                    enabled = !isFetchingAnthropicModels
+                ) {
+                    Text(if (isFetchingAnthropicModels) "Fetching..." else "Fetch models")
+                }
+            }
+            anthropicFetchMsg?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
 
             OutlinedTextField(
                 value = groqKey,
@@ -180,7 +299,6 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            val scope = rememberCoroutineScope()
             var isFetchingGroqModels by remember { mutableStateOf(false) }
             var groqFetchMsg by remember { mutableStateOf<String?>(null) }
 
@@ -498,6 +616,93 @@ fun SettingsScreen(
             // Voice Picker, Sliders, and Favorites
             Text("Voice & Speech Controls", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Expressive Gemini Voice Mode", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text("Speaks with human emotion (happy, playful, caring, excited, sad, etc.). Rate-limited to 3 req/min with automatic fallback to phone voice.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                        Switch(
+                            checked = isExpressiveVoiceEnabled,
+                            onCheckedChange = {
+                                isExpressiveVoiceEnabled = it
+                                secureStorage.saveExpressiveVoiceEnabled(it)
+                            }
+                        )
+                    }
+
+                    if (isExpressiveVoiceEnabled) {
+                        OutlinedTextField(
+                            value = geminiTtsModel,
+                            onValueChange = { geminiTtsModel = it },
+                            label = { Text("Gemini TTS Model") },
+                            placeholder = { Text("gemini-3.1-flash-tts-preview") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Text("Select Gemini Voice (Female / Male):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+
+                        val geminiVoices = listOf(
+                            Pair("Kore", "Female"),
+                            Pair("Aoede", "Female"),
+                            Pair("Leda", "Female"),
+                            Pair("Puck", "Male"),
+                            Pair("Charon", "Male")
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            geminiVoices.forEach { (vName, gender) ->
+                                val isSelected = selectedGeminiVoice == vName
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                selectedGeminiVoice = vName
+                                                secureStorage.saveGeminiVoice(vName)
+                                            },
+                                            label = { Text("$vName ($gender)") }
+                                        )
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                val sample = "Hello! I am Myra, your expressive AI companion."
+                                                onPreviewGeminiVoice(vName, sample)
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = "Preview Gemini Voice")
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Preview")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Pitch Slider
             Column {
                 Text(
@@ -727,6 +932,10 @@ fun SettingsScreen(
                     secureStorage.saveUserName(userName)
                     secureStorage.savePersonalityStyle(personalityStyle)
                     secureStorage.saveLanguageMix(languageMix)
+
+                    secureStorage.saveExpressiveVoiceEnabled(isExpressiveVoiceEnabled)
+                    secureStorage.saveGeminiTtsModel(geminiTtsModel)
+                    secureStorage.saveGeminiVoice(selectedGeminiVoice)
 
                     secureStorage.savePitch(ttsPitch)
                     secureStorage.saveSpeechRate(ttsRate)

@@ -1,5 +1,46 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint C: Fetch Models & Provider Default Model Updates
+- **Status**: Completed & Verified
+- **What Works**:
+  - Fetch Models for All Providers: Added "Fetch models" capability for Google Gemini (`v1beta/models`), OpenAI (`v1/models`), and Anthropic (`v1/models`) in `AiProviderManager.kt` and `SettingsScreen.kt` alongside existing Groq and OpenRouter fetch buttons.
+  - Default Model Updates: Updated `DEFAULT_ANTHROPIC_MODEL` to `claude-sonnet-5` and verified `DEFAULT_GEMINI_MODEL` is `gemini-3.5-flash-lite`.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ai/AiProvider.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `STATUS.md`
+
+## Checkpoint B: Personality System Prompt Rewrite
+- **Status**: Completed & Verified
+- **What Works**:
+  - Companion System Prompt Rewrite (`PersonalityPromptBuilder.kt`): System prompt rewritten for Myra to act as a warm, affectionate, playful close companion in a natural Urdu/Hindi/English mix (Hinglish/Urdish/English).
+  - Mood Sharing & Reciprocation: When asked "how are you", Myra shares her current cheerful mood and asks back about the user's mood.
+  - Mood Matching & Calm De-escalation: Matches cheerful vibes with high energy, shows gentle empathy when user is sad, and stays calm, soothing, and peaceful when user is angry (never escalating or arguing).
+  - Playful Teasing & Cute Jealousy: Teases the user lightly and shows playful jealousy without ever threatening, insulting, controlling, guilt-tripping, or claiming to be human.
+  - Mandatory Emotion Tag JSON Format: Every JSON response mandates an `emotion` tag (`happy`, `playful`, `caring`, `excited`, `sad`, `shy`, `teasing`, `calm`) alongside short natural conversational replies.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ai/PersonalityPromptBuilder.kt`
+  - `STATUS.md`
+
+## Checkpoint A: Expressive Voice Mode & Speech Queue Fix
+- **Status**: Completed & Verified
+- **What Works**:
+  - Phone TextToSpeech Sentence Queueing Fix: Queues sentence chunks using `QUEUE_ADD` (never `QUEUE_FLUSH`), preventing one or two word cutoffs and ensuring full replies are always spoken.
+  - Automatic Speech Recognition Pause: Pauses listening while Myra speaks and resumes when speaking finishes, unless user interrupts by saying "stop".
+  - Urdu Voice Fallback: Gracefully falls back from Urdu (`ur-PK`/`ur`) to Hindi (`hi-IN`/`hi`), then English (`en-US`/`en`) if Urdu voice data is unsupported or missing.
+  - Expressive Voice Mode (Gemini TTS): Integrated Gemini TTS endpoint (`gemini-3.1-flash-tts-preview`) with style instructions generated dynamically from emotion tags (`happy`, `playful`, `caring`, `excited`, `sad`, `shy`, `teasing`, `calm`).
+  - 5 Named Gemini Voices: Selector in Settings with Female/Male labels (`Kore (Female)`, `Aoede (Female)`, `Leda (Female)`, `Puck (Male)`, `Charon (Male)`) and interactive voice Preview buttons.
+  - Rate Limiting & Automatic Fallback: Rate limits Gemini TTS requests to ~3 req/min with automatic seamless fallback to phone TextToSpeech when rate limited or upon error, guaranteeing full reply delivery.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `app/src/main/java/com/myra/ai/ai/PhoneActionExecutor.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
 ## Checkpoint E: Hands-free Listening & Setup Wizard
 - **Status**: Completed & Verified
 - **What Works**:

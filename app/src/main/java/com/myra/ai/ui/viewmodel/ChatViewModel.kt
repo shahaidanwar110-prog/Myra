@@ -75,7 +75,7 @@ class ChatViewModel(
             stopCurrentTask()
             addMessage(ChatMessage(sender = "User", text = trimmedPrompt))
             addMessage(ChatMessage(sender = "Myra", text = "Task stopped."))
-            voiceController?.speak("Task stopped.")
+            voiceController?.speakExpressiveOrFallback("Task stopped.", "calm")
             return
         }
 
@@ -138,7 +138,7 @@ class ChatViewModel(
                         "No response received."
                     }
                     addMessage(ChatMessage(sender = "Myra", text = replyText, providerInfo = providerInfoStr))
-                    speakSentenceBySentence(replyText)
+                    voiceController?.speakExpressiveOrFallback(replyText, action.emotion)
                 }
             },
             onFailure = { err ->
@@ -152,20 +152,9 @@ class ChatViewModel(
                         providerInfo = providerInfoStr
                     )
                 )
-                voiceController?.speak(fullErrorMsg)
+                voiceController?.speakExpressiveOrFallback(fullErrorMsg, "sad")
             }
         )
-    }
-
-    private fun speakSentenceBySentence(text: String) {
-        val sentences = text.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
-        if (sentences.isEmpty()) {
-            voiceController?.speak(text)
-            return
-        }
-        for (sentence in sentences) {
-            voiceController?.speak(sentence)
-        }
     }
 
     private suspend fun executeParsedAction(
@@ -204,7 +193,7 @@ class ChatViewModel(
                 if (actionToExecute.type == ActionType.POST_SOCIAL_MEDIA && !actionToExecute.caption.isNullOrBlank()) {
                     val spokenPrompt = "I've drafted a comment: \"${actionToExecute.caption}\". Do you want me to post this on ${actionToExecute.platform ?: "Instagram"}?"
                     addMessage(ChatMessage(sender = "Myra", text = spokenPrompt, providerInfo = providerInfo))
-                    voiceController?.speak(spokenPrompt)
+                    voiceController?.speakExpressiveOrFallback(spokenPrompt, actionToExecute.emotion)
                 }
 
                 val confirmed = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
@@ -216,21 +205,21 @@ class ChatViewModel(
                 if (!confirmed) {
                     val cancelMsg = "Cancelled ${actionToExecute.type.name}."
                     addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
-                    voiceController?.speak(cancelMsg)
+                    voiceController?.speakExpressiveOrFallback(cancelMsg, "calm")
                     return
                 }
             } else {
                 // Default ("Ask before sending" OFF): Speak notification and wait 3s cancel window
                 val cancelNotice = "Sending in 3 seconds, say stop to cancel"
                 addMessage(ChatMessage(sender = "Myra", text = cancelNotice, providerInfo = providerInfo))
-                voiceController?.speak(cancelNotice)
+                voiceController?.speakExpressiveOrFallback(cancelNotice, "calm")
 
                 for (i in 1..30) {
                     kotlinx.coroutines.delay(100L)
                     if (!kotlin.coroutines.coroutineContext.isActive) {
                         val cancelMsg = "Cancelled ${actionToExecute.type.name}."
                         addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
-                        voiceController?.speak(cancelMsg)
+                        voiceController?.speakExpressiveOrFallback(cancelMsg, "calm")
                         return
                     }
                 }
@@ -264,7 +253,7 @@ class ChatViewModel(
             onSuccess = { resultMessage ->
                 addMessage(ChatMessage(sender = "Myra", text = resultMessage, providerInfo = providerInfo))
                 com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $resultMessage")
-                voiceController?.speak(resultMessage)
+                voiceController?.speakExpressiveOrFallback(resultMessage, actionToExecute.emotion)
             },
             onFailure = { err ->
                 val errorMsg = err.localizedMessage ?: err.message ?: "Action execution failed."
@@ -278,7 +267,7 @@ class ChatViewModel(
                     )
                 )
                 com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $errorMsg")
-                voiceController?.speak("Error: $errorMsg")
+                voiceController?.speakExpressiveOrFallback("Error: $errorMsg", "sad")
             }
         )
     }
@@ -299,7 +288,7 @@ class ChatViewModel(
             // Short spoken progress update for user
             val spokenProgress = "Step $stepNum: $stepDesc"
             com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $spokenProgress")
-            voiceController?.speak(spokenProgress)
+            voiceController?.speakExpressiveOrFallback(spokenProgress, step.emotion)
 
             val pcm = phoneControlManager ?: break
             val targetStr = step.target ?: step.recipient ?: step.textToType ?: "N/A"
@@ -328,7 +317,7 @@ class ChatViewModel(
             if (!isSuccess) {
                 val failReport = "Multi-step task stopped at step $stepNum of $total (${step.type.name}). Failure reason: ${failureReason ?: "Unknown error"}"
                 addMessage(ChatMessage(sender = "Myra", text = failReport, isError = true, providerInfo = providerInfo))
-                voiceController?.speak("Step $stepNum failed. $resultMsg")
+                voiceController?.speakExpressiveOrFallback("Step $stepNum failed. $resultMsg", "sad")
                 return
             }
 
@@ -339,6 +328,6 @@ class ChatViewModel(
 
         val completionMsg = "All $total steps completed successfully."
         addMessage(ChatMessage(sender = "Myra", text = completionMsg, providerInfo = providerInfo))
-        voiceController?.speak(completionMsg)
+        voiceController?.speakExpressiveOrFallback(completionMsg, "happy")
     }
 }
