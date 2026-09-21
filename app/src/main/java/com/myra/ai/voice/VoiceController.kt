@@ -41,14 +41,37 @@ class VoiceController(
     var isLiveMode: Boolean = false
         private set
 
+    private var silenceRunnable: Runnable? = null
+    var onSilenceTimeoutListener: (() -> Unit)? = null
+
     var onSpeechResultListener: ((String) -> Unit)? = null
 
     fun setLiveMode(enabled: Boolean) {
         isLiveMode = enabled
-        if (!enabled) {
+        if (enabled) {
+            resetSilenceTimer()
+        } else {
+            cancelSilenceTimer()
             stopListening()
             stopSpeaking()
         }
+    }
+
+    private fun resetSilenceTimer() {
+        cancelSilenceTimer()
+        if (!isLiveMode) return
+        silenceRunnable = Runnable {
+            if (isLiveMode) {
+                setLiveMode(false)
+                onSilenceTimeoutListener?.invoke()
+            }
+        }
+        mainHandler.postDelayed(silenceRunnable!!, 120000L) // 2 minutes auto-stop
+    }
+
+    private fun cancelSilenceTimer() {
+        silenceRunnable?.let { mainHandler.removeCallbacks(it) }
+        silenceRunnable = null
     }
 
     init {
@@ -87,7 +110,14 @@ class VoiceController(
                         if (!matches.isNullOrEmpty()) {
                             val text = matches[0]
                             _spokenText.value = text
+                            if (isLiveMode) {
+                                resetSilenceTimer()
+                            }
                             onSpeechResultListener?.invoke(text)
+                        } else if (isLiveMode) {
+                            mainHandler.postDelayed({
+                                if (isLiveMode) startListening()
+                            }, 500L)
                         }
                     }
 

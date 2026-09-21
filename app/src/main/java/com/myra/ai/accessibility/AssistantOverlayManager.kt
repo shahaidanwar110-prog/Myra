@@ -9,6 +9,8 @@ import android.widget.*
 import com.myra.ai.R
 import kotlin.math.abs
 
+enum class OrbState { IDLE, LISTENING, THINKING, SPEAKING }
+
 class FloatingOrbView(context: Context) : View(context) {
     private val avatarBitmap: Bitmap? by lazy {
         try {
@@ -17,6 +19,8 @@ class FloatingOrbView(context: Context) : View(context) {
             null
         }
     }
+
+    private var currentState = OrbState.IDLE
 
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -43,6 +47,31 @@ class FloatingOrbView(context: Context) : View(context) {
         animator.start()
     }
 
+    fun setState(state: OrbState) {
+        if (currentState != state) {
+            currentState = state
+            when (state) {
+                OrbState.LISTENING -> {
+                    borderPaint.color = Color.parseColor("#06B6D4") // Cyan
+                    animator.duration = 800
+                }
+                OrbState.THINKING -> {
+                    borderPaint.color = Color.parseColor("#A855F7") // Purple/Violet
+                    animator.duration = 600
+                }
+                OrbState.SPEAKING -> {
+                    borderPaint.color = Color.parseColor("#EC4899") // Pink
+                    animator.duration = 1000
+                }
+                OrbState.IDLE -> {
+                    borderPaint.color = Color.parseColor("#FFD700") // Gold
+                    animator.duration = 1500
+                }
+            }
+            invalidate()
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         animator.cancel()
@@ -55,13 +84,27 @@ class FloatingOrbView(context: Context) : View(context) {
         val baseRadius = (width.coerceAtMost(height) / 2f) - 16f
         if (baseRadius <= 0) return
 
+        val glowColor1 = when (currentState) {
+            OrbState.LISTENING -> Color.parseColor("#A006B6D4")
+            OrbState.THINKING -> Color.parseColor("#A0A855F7")
+            OrbState.SPEAKING -> Color.parseColor("#A0EC4899")
+            OrbState.IDLE -> Color.parseColor("#808A2BE2")
+        }
+
+        val glowColor2 = when (currentState) {
+            OrbState.LISTENING -> Color.parseColor("#4038BDF8")
+            OrbState.THINKING -> Color.parseColor("#40C084FC")
+            OrbState.SPEAKING -> Color.parseColor("#40F472B6")
+            OrbState.IDLE -> Color.parseColor("#40FFD700")
+        }
+
         // Soft radial glow background
         val glowRadius = baseRadius * pulseRadius
         glowPaint.shader = RadialGradient(
             cx, cy, glowRadius.coerceAtLeast(1f),
             intArrayOf(
-                Color.parseColor("#808A2BE2"), // Purple alpha
-                Color.parseColor("#40FFD700"), // Gold alpha
+                glowColor1,
+                glowColor2,
                 Color.TRANSPARENT
             ),
             floatArrayOf(0f, 0.6f, 1f),
@@ -90,7 +133,7 @@ class FloatingOrbView(context: Context) : View(context) {
             canvas.drawCircle(cx, cy, baseRadius, fillPaint)
         }
 
-        // Gold border
+        // Border
         canvas.drawCircle(cx, cy, baseRadius, borderPaint)
     }
 }
@@ -223,7 +266,7 @@ class EdgeLightingView(context: Context) : View(context) {
 object AssistantOverlayManager {
 
     private var windowManager: WindowManager? = null
-    private var orbView: View? = null
+    private var orbView: FloatingOrbView? = null
     private var quickChatView: View? = null
     private var edgeLightingView: EdgeLightingView? = null
 
@@ -450,6 +493,23 @@ object AssistantOverlayManager {
 
     fun updateAudioState(isListening: Boolean, isSpeaking: Boolean) {
         edgeLightingView?.updateState(isListening, isSpeaking)
+        val state = when {
+            isListening -> OrbState.LISTENING
+            isSpeaking -> OrbState.SPEAKING
+            else -> OrbState.IDLE
+        }
+        orbView?.setState(state)
+    }
+
+    fun updateOverlayState(isListening: Boolean, isThinking: Boolean, isSpeaking: Boolean) {
+        edgeLightingView?.updateState(isListening || isThinking, isSpeaking)
+        val state = when {
+            isListening -> OrbState.LISTENING
+            isThinking -> OrbState.THINKING
+            isSpeaking -> OrbState.SPEAKING
+            else -> OrbState.IDLE
+        }
+        orbView?.setState(state)
     }
 
     fun appendChatMessage(message: String) {

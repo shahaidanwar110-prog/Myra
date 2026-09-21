@@ -1,5 +1,21 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint A: Always-With-You Mode (Hands-Free Assistant)
+- **Status**: Completed & Verified
+- **What Works**:
+  - Always-with-you Foreground Service (`OverlayForegroundService.kt`): Foreground service with `android:foregroundServiceType="microphone"` started while app is visible to keep the floating orb active on top of all apps.
+  - Live Conversation Mode & Auto-Recovery (`VoiceController.kt`): Live speech listening loop with automatic speech recognizer recovery on error/end-of-speech and 2-minute auto-stop silence timer.
+  - Hands-Free Navigation Across Other Apps: Simple commands (e.g. "open YouTube", "go back", "go home", "scroll down", "open Instagram") run via Accessibility Service in the background without forcing user back to the Myra main activity.
+  - Visual Orb & Overlay States (`AssistantOverlayManager.kt`): Clear state indicators for `LISTENING` (cyan), `THINKING` (violet), `SPEAKING` (pink), and `IDLE` (gold).
+  - Stop Controls & Persistent Notification: Clear Stop button on notification and quick chat overlay that stops overlay service and live voice listening completely.
+- **Files Pushed**:
+  - `app/src/main/AndroidManifest.xml`
+  - `app/src/main/java/com/myra/ai/accessibility/OverlayForegroundService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/AssistantOverlayManager.kt`
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `STATUS.md`
+
 ## Checkpoint C: Task Log Screen, Task Reliability, Intents & Retry Strategy
 - **Status**: Completed & Verified
 - **What Works**:
