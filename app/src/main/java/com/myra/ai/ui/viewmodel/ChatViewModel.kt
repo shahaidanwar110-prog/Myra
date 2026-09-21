@@ -105,6 +105,11 @@ class ChatViewModel(
         com.myra.ai.accessibility.AssistantOverlayManager.updateOverlayState(isListening = false, isThinking = true, isSpeaking = false)
         val providerInfoStr = getProviderInfo()
 
+        aiProviderManager.onQuotaWaitListener = { notice ->
+            addMessage(ChatMessage(sender = "Myra", text = notice, providerInfo = providerInfoStr))
+            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $notice")
+        }
+
         val systemPrompt = com.myra.ai.ai.PersonalityPromptBuilder.buildSystemPrompt(secureStorage)
         val result = aiProviderManager.generateText(trimmedPrompt, systemPrompt)
 
@@ -126,7 +131,7 @@ class ChatViewModel(
                         "No response received."
                     }
                     addMessage(ChatMessage(sender = "Myra", text = replyText, providerInfo = providerInfoStr))
-                    voiceController?.speak(replyText)
+                    speakSentenceBySentence(replyText)
                 }
             },
             onFailure = { err ->
@@ -143,6 +148,17 @@ class ChatViewModel(
                 voiceController?.speak(fullErrorMsg)
             }
         )
+    }
+
+    private fun speakSentenceBySentence(text: String) {
+        val sentences = text.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+        if (sentences.isEmpty()) {
+            voiceController?.speak(text)
+            return
+        }
+        for (sentence in sentences) {
+            voiceController?.speak(sentence)
+        }
     }
 
     private suspend fun executeParsedAction(

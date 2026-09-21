@@ -179,14 +179,53 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = groqModel,
-                onValueChange = { groqModel = it },
-                label = { Text("Groq Model") },
-                placeholder = { Text("llama-3.3-70b-versatile") },
+            val scope = rememberCoroutineScope()
+            var isFetchingGroqModels by remember { mutableStateOf(false) }
+            var groqFetchMsg by remember { mutableStateOf<String?>(null) }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = groqModel,
+                    onValueChange = { groqModel = it },
+                    label = { Text("Groq Model") },
+                    placeholder = { Text("llama-3.3-70b-versatile") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            isFetchingGroqModels = true
+                            groqFetchMsg = null
+                            secureStorage.saveApiKey(SecureStorage.PROVIDER_GROQ, groqKey)
+                            val providerManager = AiProviderManager(secureStorage)
+                            val res = providerManager.fetchModels(SecureStorage.PROVIDER_GROQ)
+                            isFetchingGroqModels = false
+                            res.onSuccess { models ->
+                                if (models.isNotEmpty()) {
+                                    groqModel = models.first()
+                                    groqFetchMsg = "Fetched ${models.size} models. Set to ${models.first()}"
+                                } else {
+                                    groqFetchMsg = "No models found."
+                                }
+                            }.onFailure { err ->
+                                groqFetchMsg = "Fetch error: ${err.localizedMessage ?: err.message}"
+                            }
+                        }
+                    },
+                    enabled = !isFetchingGroqModels
+                ) {
+                    Text(if (isFetchingGroqModels) "Fetching..." else "Fetch models")
+                }
+            }
+            groqFetchMsg?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
 
             OutlinedTextField(
                 value = openRouterKey,
@@ -198,14 +237,52 @@ fun SettingsScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = openRouterModel,
-                onValueChange = { openRouterModel = it },
-                label = { Text("OpenRouter Model") },
-                placeholder = { Text("meta-llama/llama-3.3-70b-instruct") },
+            var isFetchingOpenRouterModels by remember { mutableStateOf(false) }
+            var openRouterFetchMsg by remember { mutableStateOf<String?>(null) }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = openRouterModel,
+                    onValueChange = { openRouterModel = it },
+                    label = { Text("OpenRouter Model") },
+                    placeholder = { Text("meta-llama/llama-3.3-70b-instruct") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            isFetchingOpenRouterModels = true
+                            openRouterFetchMsg = null
+                            secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENROUTER, openRouterKey)
+                            val providerManager = AiProviderManager(secureStorage)
+                            val res = providerManager.fetchModels(SecureStorage.PROVIDER_OPENROUTER)
+                            isFetchingOpenRouterModels = false
+                            res.onSuccess { models ->
+                                if (models.isNotEmpty()) {
+                                    openRouterModel = models.first()
+                                    openRouterFetchMsg = "Fetched ${models.size} models. Set to ${models.first()}"
+                                } else {
+                                    openRouterFetchMsg = "No models found."
+                                }
+                            }.onFailure { err ->
+                                openRouterFetchMsg = "Fetch error: ${err.localizedMessage ?: err.message}"
+                            }
+                        }
+                    },
+                    enabled = !isFetchingOpenRouterModels
+                ) {
+                    Text(if (isFetchingOpenRouterModels) "Fetching..." else "Fetch models")
+                }
+            }
+            openRouterFetchMsg?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
 
             OutlinedTextField(
                 value = githubToken,
@@ -219,81 +296,96 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            Text("Active AI Provider", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val providers = listOf(
-                    SecureStorage.PROVIDER_GEMINI,
-                    SecureStorage.PROVIDER_OPENAI,
-                    SecureStorage.PROVIDER_ANTHROPIC,
-                    SecureStorage.PROVIDER_GROQ,
-                    SecureStorage.PROVIDER_OPENROUTER
-                )
-                providers.forEach { provider ->
-                    FilterChip(
-                        selected = activeProvider == provider,
-                        onClick = { activeProvider = provider },
-                        label = { Text(provider) }
-                    )
-                }
-            }
+            Text("AI Providers & Connection Test", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
-            val scope = rememberCoroutineScope()
-            var isTestingConnection by remember { mutableStateOf(false) }
+            val providers = listOf(
+                SecureStorage.PROVIDER_GEMINI,
+                SecureStorage.PROVIDER_OPENAI,
+                SecureStorage.PROVIDER_ANTHROPIC,
+                SecureStorage.PROVIDER_GROQ,
+                SecureStorage.PROVIDER_OPENROUTER
+            )
+
+            var testingProvider by remember { mutableStateOf<String?>(null) }
             var testResultMsg by remember { mutableStateOf<String?>(null) }
             var isTestError by remember { mutableStateOf(false) }
 
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        isTestingConnection = true
-                        testResultMsg = null
-                        isTestError = false
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                providers.forEach { provider ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (activeProvider == provider) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = activeProvider == provider,
+                                    onClick = { activeProvider = provider },
+                                    label = { Text(provider) }
+                                )
+                                if (activeProvider == provider) {
+                                    Text("(Active)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                }
+                            }
 
-                        // Save current keys and provider to storage first so AiProviderManager reads updated config
-                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
-                        secureStorage.saveModel(SecureStorage.PROVIDER_GEMINI, geminiModel)
-                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
-                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENAI, openAiModel)
-                        secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
-                        secureStorage.saveModel(SecureStorage.PROVIDER_ANTHROPIC, anthropicModel)
-                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GROQ, groqKey)
-                        secureStorage.saveModel(SecureStorage.PROVIDER_GROQ, groqModel)
-                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENROUTER, openRouterKey)
-                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENROUTER, openRouterModel)
-                        secureStorage.saveActiveProvider(activeProvider)
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        testingProvider = provider
+                                        testResultMsg = null
+                                        isTestError = false
 
-                        val providerManager = AiProviderManager(secureStorage)
-                        val res = providerManager.generateText("Hello! Respond with 'Connection Successful' if working.")
-                        isTestingConnection = false
-                        res.onSuccess { text ->
-                            isTestError = false
-                            testResultMsg = "Success ($activeProvider): ${text.trim()}"
-                        }.onFailure { err ->
-                            isTestError = true
-                            testResultMsg = "Connection Error ($activeProvider): ${err.localizedMessage ?: err.message}"
+                                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
+                                        secureStorage.saveModel(SecureStorage.PROVIDER_GEMINI, geminiModel)
+                                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
+                                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENAI, openAiModel)
+                                        secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
+                                        secureStorage.saveModel(SecureStorage.PROVIDER_ANTHROPIC, anthropicModel)
+                                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GROQ, groqKey)
+                                        secureStorage.saveModel(SecureStorage.PROVIDER_GROQ, groqModel)
+                                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENROUTER, openRouterKey)
+                                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENROUTER, openRouterModel)
+
+                                        val providerManager = AiProviderManager(secureStorage)
+                                        val singleProvider = providerManager.getProvider(provider)
+                                        val res = singleProvider.generateText("Hello! Respond with 'Connection Successful' if working.")
+                                        testingProvider = null
+                                        res.onSuccess { text ->
+                                            isTestError = false
+                                            testResultMsg = "Success ($provider): ${text.trim()}"
+                                        }.onFailure { err ->
+                                            isTestError = true
+                                            testResultMsg = "Connection Error ($provider): ${err.localizedMessage ?: err.message}"
+                                        }
+                                    }
+                                },
+                                enabled = testingProvider == null
+                            ) {
+                                if (testingProvider == provider) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Testing...")
+                                } else {
+                                    Icon(Icons.Default.Radio, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Test Connection")
+                                }
+                            }
                         }
                     }
-                },
-                enabled = !isTestingConnection,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isTestingConnection) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Testing Connection...")
-                } else {
-                    Icon(Icons.Default.Radio, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Test Connection ($activeProvider)")
                 }
             }
 

@@ -303,7 +303,9 @@ private fun ApiKeyStepContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val providers = listOf(
-                SecureStorage.PROVIDER_GEMINI to "Gemini (Default)",
+                SecureStorage.PROVIDER_GEMINI to "Gemini",
+                SecureStorage.PROVIDER_GROQ to "Groq",
+                SecureStorage.PROVIDER_OPENROUTER to "OpenRouter",
                 SecureStorage.PROVIDER_OPENAI to "OpenAI",
                 SecureStorage.PROVIDER_ANTHROPIC to "Anthropic"
             )
@@ -316,7 +318,7 @@ private fun ApiKeyStepContent(
                     label = {
                         Text(
                             text = label,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
                     },
@@ -329,8 +331,7 @@ private fun ApiKeyStepContent(
                                 tint = PrimaryPurple
                             )
                         }
-                    } else null,
-                    modifier = Modifier.weight(1f)
+                    } else null
                 )
             }
         }
