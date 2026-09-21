@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
@@ -31,13 +33,23 @@ class ChatViewModel(
     private val _isThinking = MutableStateFlow(false)
     val isThinking: StateFlow<Boolean> = _isThinking.asStateFlow()
 
+    private var activeTaskJob: kotlinx.coroutines.Job? = null
+
+    fun stopCurrentTask() {
+        activeTaskJob?.cancel()
+        activeTaskJob = null
+        voiceController?.stopSpeaking()
+        _isThinking.value = false
+        com.myra.ai.accessibility.AssistantOverlayManager.updateOverlayState(
+            isListening = false,
+            isThinking = false,
+            isSpeaking = false
+        )
+    }
+
     fun getProviderInfo(): String {
         val provider = secureStorage.getActiveProvider()
-        val model = when (provider) {
-            SecureStorage.PROVIDER_OPENAI -> "gpt-4o"
-            SecureStorage.PROVIDER_ANTHROPIC -> "claude-3-5-sonnet-20241022"
-            else -> secureStorage.getGeminiModel().ifBlank { SecureStorage.DEFAULT_GEMINI_MODEL }
-        }
+        val model = secureStorage.getModel(provider)
         return "$provider ($model)"
     }
 
@@ -56,10 +68,22 @@ class ChatViewModel(
         val trimmedPrompt = prompt.trim()
         if (trimmedPrompt.isBlank()) return
 
+        val lowerPrompt = trimmedPrompt.lowercase()
+        if (lowerPrompt == "stop" || lowerPrompt == "cancel" || lowerPrompt == "stop task" || lowerPrompt == "shut up") {
+            stopCurrentTask()
+            addMessage(ChatMessage(sender = "User", text = trimmedPrompt))
+            addMessage(ChatMessage(sender = "Myra", text = "Task stopped."))
+            voiceController?.speak("Task stopped.")
+            return
+        }
+
+        // Interrupt previous task if active
+        activeTaskJob?.cancel()
+
         // Append user message
         addMessage(ChatMessage(sender = "User", text = trimmedPrompt))
 
-        viewModelScope.launch {
+        activeTaskJob = viewModelScope.launch {
             processPromptInternal(trimmedPrompt, onConfirmationRequired)
         }
     }
@@ -137,28 +161,43 @@ class ChatViewModel(
             return
         }
 
-        val requiresConfirmation = action.type == ActionType.CALL ||
-                action.type == ActionType.SEND_SMS ||
-                action.type == ActionType.WHATSAPP ||
-                action.type == ActionType.POST_SOCIAL_MEDIA
+        var actionToExecute = action
+        if (action.type == ActionType.POST_SOCIAL_MEDIA && action.caption.isNullOrBlank()) {
+            val screenTreeText = com.myra.ai.accessibility.MyraAccessibilityService.getInstance()?.dumpNodeTreeText() ?: ""
+            val commentPrompt = "Read the screen caption/content below and write a short, friendly, fitting 1-sentence comment for this video:\n$screenTreeText"
+            val generatedResult = aiProviderManager.generateText(commentPrompt)
+            val commentText = generatedResult.getOrDefault("Awesome video! 🔥").trim()
+            actionToExecute = action.copy(caption = commentText, message = "Drafted comment: \"$commentText\"")
+        }
+
+        val requiresConfirmation = actionToExecute.type == ActionType.CALL ||
+                actionToExecute.type == ActionType.SEND_SMS ||
+                actionToExecute.type == ActionType.WHATSAPP ||
+                actionToExecute.type == ActionType.POST_SOCIAL_MEDIA
 
         if (requiresConfirmation && onConfirmationRequired != null) {
+            if (actionToExecute.type == ActionType.POST_SOCIAL_MEDIA && !actionToExecute.caption.isNullOrBlank()) {
+                val spokenPrompt = "I've drafted a comment: \"${actionToExecute.caption}\". Do you want me to post this on ${actionToExecute.platform ?: "Instagram"}?"
+                addMessage(ChatMessage(sender = "Myra", text = spokenPrompt, providerInfo = providerInfo))
+                voiceController?.speak(spokenPrompt)
+            }
+
             val confirmed = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
-                onConfirmationRequired(action) { result ->
+                onConfirmationRequired(actionToExecute) { result ->
                     if (cont.isActive) cont.resume(result, null)
                 }
             }
 
             if (!confirmed) {
-                val cancelMsg = "Cancelled ${action.type.name}."
+                val cancelMsg = "Cancelled ${actionToExecute.type.name}."
                 addMessage(ChatMessage(sender = "Myra", text = cancelMsg, providerInfo = providerInfo))
                 voiceController?.speak(cancelMsg)
                 return
             }
         }
 
-        val targetStr = action.target ?: action.recipient ?: action.textToType ?: "N/A"
-        val execResult = PhoneActionExecutor.executeAction(action, phoneControlManager, maxRetries = 2)
+        val targetStr = actionToExecute.target ?: actionToExecute.recipient ?: actionToExecute.caption ?: actionToExecute.textToType ?: "N/A"
+        val execResult = PhoneActionExecutor.executeAction(actionToExecute, phoneControlManager, maxRetries = 2)
 
         val isSuccess = execResult.isSuccess
         val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
@@ -205,9 +244,16 @@ class ChatViewModel(
     ) {
         val total = steps.size
         for ((index, step) in steps.withIndex()) {
+            if (!coroutineContext.isActive) break
+
             val stepNum = index + 1
-            val stepDesc = step.message ?: "Executing step $stepNum: ${step.type.name}"
+            val stepDesc = step.message ?: "Step $stepNum: ${step.type.name}"
             addMessage(ChatMessage(sender = "Myra", text = "Step $stepNum/$total: $stepDesc", providerInfo = providerInfo))
+
+            // Short spoken progress update for user
+            val spokenProgress = "Step $stepNum: $stepDesc"
+            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $spokenProgress")
+            voiceController?.speak(spokenProgress)
 
             val pcm = phoneControlManager ?: break
             val targetStr = step.target ?: step.recipient ?: step.textToType ?: "N/A"
@@ -236,7 +282,7 @@ class ChatViewModel(
             }
 
             if (index < total - 1) {
-                kotlinx.coroutines.delay(1500L)
+                kotlinx.coroutines.delay(1200L)
             }
         }
 

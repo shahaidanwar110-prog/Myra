@@ -184,7 +184,10 @@ class GeminiProvider(
     }
 }
 
-class OpenAiProvider(private val apiKey: String) : AiProvider {
+class OpenAiProvider(
+    private val apiKey: String,
+    private val model: String = SecureStorage.DEFAULT_OPENAI_MODEL
+) : AiProvider {
     override val name: String = SecureStorage.PROVIDER_OPENAI
 
     override suspend fun generateText(prompt: String, systemPrompt: String?): Result<String> {
@@ -204,8 +207,9 @@ class OpenAiProvider(private val apiKey: String) : AiProvider {
             put("content", prompt)
         })
 
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_OPENAI_MODEL }
         val body = JSONObject().apply {
-            put("model", "gpt-4o")
+            put("model", effectiveModel)
             put("messages", messages)
             put("max_tokens", 2048)
         }
@@ -274,7 +278,10 @@ class OpenAiProvider(private val apiKey: String) : AiProvider {
     }
 }
 
-class AnthropicProvider(private val apiKey: String) : AiProvider {
+class AnthropicProvider(
+    private val apiKey: String,
+    private val model: String = SecureStorage.DEFAULT_ANTHROPIC_MODEL
+) : AiProvider {
     override val name: String = SecureStorage.PROVIDER_ANTHROPIC
 
     override suspend fun generateText(prompt: String, systemPrompt: String?): Result<String> {
@@ -282,8 +289,9 @@ class AnthropicProvider(private val apiKey: String) : AiProvider {
             return Result.failure(Exception("Anthropic API key is missing. Please set it in Settings."))
         }
 
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_ANTHROPIC_MODEL }
         val body = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
+            put("model", effectiveModel)
             if (!systemPrompt.isNullOrBlank()) {
                 put("system", systemPrompt)
             }
@@ -332,8 +340,9 @@ class AnthropicProvider(private val apiKey: String) : AiProvider {
             })
         }
 
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_ANTHROPIC_MODEL }
         val body = JSONObject().apply {
-            put("model", "claude-3-5-sonnet-20241022")
+            put("model", effectiveModel)
             put("max_tokens", 2048)
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
@@ -356,27 +365,197 @@ class AnthropicProvider(private val apiKey: String) : AiProvider {
     }
 }
 
-open class AiProviderManager(private val secureStorage: SecureStorage) {
+class GroqProvider(
+    private val apiKey: String,
+    private val model: String = SecureStorage.DEFAULT_GROQ_MODEL
+) : AiProvider {
+    override val name: String = SecureStorage.PROVIDER_GROQ
 
-    open fun getActiveProvider(): AiProvider {
-        val activeName = secureStorage.getActiveProvider()
-        val apiKey = secureStorage.getApiKey(activeName)
+    override suspend fun generateText(prompt: String, systemPrompt: String?): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("Groq API key is missing. Please set it in Settings."))
+        }
 
-        return when (activeName) {
-            SecureStorage.PROVIDER_OPENAI -> OpenAiProvider(apiKey)
-            SecureStorage.PROVIDER_ANTHROPIC -> AnthropicProvider(apiKey)
-            else -> GeminiProvider(apiKey, secureStorage.getGeminiModel())
+        val messages = JSONArray()
+        if (!systemPrompt.isNullOrBlank()) {
+            messages.put(JSONObject().apply {
+                put("role", "system")
+                put("content", systemPrompt)
+            })
+        }
+        messages.put(JSONObject().apply {
+            put("role", "user")
+            put("content", prompt)
+        })
+
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_GROQ_MODEL }
+        val body = JSONObject().apply {
+            put("model", effectiveModel)
+            put("messages", messages)
+            put("max_tokens", 2048)
+        }
+
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "Authorization" to "Bearer $apiKey"
+        )
+
+        return httpPostRequest("https://api.groq.com/openai/v1/chat/completions", headers, body.toString()).mapCatching { json ->
+            val obj = JSONObject(json)
+            obj.getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
         }
     }
 
+    override suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("Groq API key is missing. Please set it in Settings."))
+        }
+        val textPrompt = "$prompt\n\nScreen Node Tree:\n$screenTreeText"
+        return generateText(textPrompt)
+    }
+}
+
+class OpenRouterProvider(
+    private val apiKey: String,
+    private val model: String = SecureStorage.DEFAULT_OPENROUTER_MODEL
+) : AiProvider {
+    override val name: String = SecureStorage.PROVIDER_OPENROUTER
+
+    override suspend fun generateText(prompt: String, systemPrompt: String?): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("OpenRouter API key is missing. Please set it in Settings."))
+        }
+
+        val messages = JSONArray()
+        if (!systemPrompt.isNullOrBlank()) {
+            messages.put(JSONObject().apply {
+                put("role", "system")
+                put("content", systemPrompt)
+            })
+        }
+        messages.put(JSONObject().apply {
+            put("role", "user")
+            put("content", prompt)
+        })
+
+        val effectiveModel = model.ifBlank { SecureStorage.DEFAULT_OPENROUTER_MODEL }
+        val body = JSONObject().apply {
+            put("model", effectiveModel)
+            put("messages", messages)
+            put("max_tokens", 2048)
+        }
+
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "Authorization" to "Bearer $apiKey",
+            "HTTP-Referer" to "https://myra.ai",
+            "X-Title" to "Myra AI"
+        )
+
+        return httpPostRequest("https://openrouter.ai/api/v1/chat/completions", headers, body.toString()).mapCatching { json ->
+            val obj = JSONObject(json)
+            obj.getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
+        }
+    }
+
+    override suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
+        if (apiKey.isBlank()) {
+            return Result.failure(Exception("OpenRouter API key is missing. Please set it in Settings."))
+        }
+        val textPrompt = "$prompt\n\nScreen Node Tree:\n$screenTreeText"
+        return generateText(textPrompt)
+    }
+}
+
+open class AiProviderManager(private val secureStorage: SecureStorage) {
+
+    fun getProvider(providerName: String): AiProvider {
+        val apiKey = secureStorage.getApiKey(providerName)
+        val model = secureStorage.getModel(providerName)
+        return when (providerName) {
+            SecureStorage.PROVIDER_OPENAI -> OpenAiProvider(apiKey, model)
+            SecureStorage.PROVIDER_ANTHROPIC -> AnthropicProvider(apiKey, model)
+            SecureStorage.PROVIDER_GROQ -> GroqProvider(apiKey, model)
+            SecureStorage.PROVIDER_OPENROUTER -> OpenRouterProvider(apiKey, model)
+            else -> GeminiProvider(apiKey, model)
+        }
+    }
+
+    open fun getActiveProvider(): AiProvider {
+        return getProvider(secureStorage.getActiveProvider())
+    }
+
     open suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<String> {
-        val provider = getActiveProvider()
-        return provider.generateText(prompt, systemPrompt)
+        val primaryName = secureStorage.getActiveProvider()
+        val primaryProvider = getProvider(primaryName)
+
+        val primaryResult = primaryProvider.generateText(prompt, systemPrompt)
+        if (primaryResult.isSuccess) {
+            return primaryResult
+        }
+
+        // Fallback to other configured providers
+        val allProviders = listOf(
+            SecureStorage.PROVIDER_GEMINI,
+            SecureStorage.PROVIDER_OPENAI,
+            SecureStorage.PROVIDER_ANTHROPIC,
+            SecureStorage.PROVIDER_GROQ,
+            SecureStorage.PROVIDER_OPENROUTER
+        )
+
+        val configuredFallbacks = allProviders.filter { provider ->
+            provider != primaryName && secureStorage.getApiKey(provider).isNotBlank()
+        }
+
+        for (fallbackName in configuredFallbacks) {
+            val fallbackProvider = getProvider(fallbackName)
+            val fallbackResult = fallbackProvider.generateText(prompt, systemPrompt)
+            if (fallbackResult.isSuccess) {
+                return fallbackResult
+            }
+        }
+
+        val originalErr = primaryResult.exceptionOrNull()?.message ?: "Provider error"
+        return Result.failure(Exception("AI Service Error ($primaryName): $originalErr. Please check your API keys or internet connection."))
     }
 
     open suspend fun describeScreen(image: Bitmap?, screenTreeText: String, prompt: String): Result<String> {
-        val provider = getActiveProvider()
-        return provider.describeScreen(image, screenTreeText, prompt)
+        val primaryName = secureStorage.getActiveProvider()
+        val primaryProvider = getProvider(primaryName)
+
+        val primaryResult = primaryProvider.describeScreen(image, screenTreeText, prompt)
+        if (primaryResult.isSuccess) {
+            return primaryResult
+        }
+
+        val allProviders = listOf(
+            SecureStorage.PROVIDER_GEMINI,
+            SecureStorage.PROVIDER_OPENAI,
+            SecureStorage.PROVIDER_ANTHROPIC,
+            SecureStorage.PROVIDER_GROQ,
+            SecureStorage.PROVIDER_OPENROUTER
+        )
+
+        val configuredFallbacks = allProviders.filter { provider ->
+            provider != primaryName && secureStorage.getApiKey(provider).isNotBlank()
+        }
+
+        for (fallbackName in configuredFallbacks) {
+            val fallbackProvider = getProvider(fallbackName)
+            val fallbackResult = fallbackProvider.describeScreen(image, screenTreeText, prompt)
+            if (fallbackResult.isSuccess) {
+                return fallbackResult
+            }
+        }
+
+        val originalErr = primaryResult.exceptionOrNull()?.message ?: "Provider error"
+        return Result.failure(Exception("Screen analysis error ($primaryName): $originalErr. Please check your API keys or internet connection."))
     }
 
     suspend fun generateSocialPostContent(platform: String, topic: String): Result<Pair<String, String>> {

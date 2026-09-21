@@ -113,6 +113,11 @@ class VoiceController(
                             if (isLiveMode) {
                                 resetSilenceTimer()
                             }
+                            // Interruption shortcut: if user says stop/cancel, immediately stop TTS
+                            val cleanText = text.trim().lowercase()
+                            if (cleanText == "stop" || cleanText == "cancel" || cleanText == "shut up" || cleanText == "be quiet" || cleanText == "stop listening") {
+                                stopSpeaking()
+                            }
                             onSpeechResultListener?.invoke(text)
                         } else if (isLiveMode) {
                             mainHandler.postDelayed({

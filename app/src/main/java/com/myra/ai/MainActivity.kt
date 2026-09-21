@@ -438,17 +438,41 @@ class MainActivity : ComponentActivity() {
     ) {
         val providerInfoStr = chatViewModel.getProviderInfo()
 
-        if (isCoderRequest && trimmedPrompt.contains("website", ignoreCase = true)) {
-            val siteRes = coderAgent.generateWebsite(trimmedPrompt)
-            siteRes.onSuccess { file ->
-                val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon to view WebView preview."
-                chatViewModel.addMessage(ChatMessage("Myra", msg, providerInfo = providerInfoStr))
-                voiceController.speak("Website generated successfully. Open Code Mode to preview in WebView.")
-                appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
-            }.onFailure { err ->
-                val errMsg = "Failed to generate website: ${err.localizedMessage ?: err.message}"
-                chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
-                voiceController.speak(errMsg)
+        if (isCoderRequest) {
+            val isWebsite = trimmedPrompt.contains("website", ignoreCase = true)
+            val ackMsg = if (isWebsite) {
+                "I've started generating your website as a background job. I'll report back when done."
+            } else {
+                "I've started building your app project in the background. I'll report back when done."
+            }
+            chatViewModel.addMessage(ChatMessage("Myra", ackMsg, providerInfo = providerInfoStr))
+            voiceController.speak(ackMsg)
+
+            if (isWebsite) {
+                val siteRes = coderAgent.generateWebsite(trimmedPrompt)
+                siteRes.onSuccess { file ->
+                    val msg = "Website generated successfully! Saved locally: ${file.absolutePath}. Tap Code Mode icon to view WebView preview."
+                    chatViewModel.addMessage(ChatMessage("Myra", msg, providerInfo = providerInfoStr))
+                    voiceController.speak("Your website background job is complete! You can view it in Code Mode.")
+                    appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
+                }.onFailure { err ->
+                    val errMsg = "Background website generation failed: ${err.localizedMessage ?: err.message}"
+                    chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
+                    voiceController.speak(errMsg)
+                }
+            } else {
+                val repoName = "MyraApp"
+                val githubOwner = secureStorage.getString("GITHUB_OWNER").ifBlank { "myra-user" }
+                val appRes = coderAgent.generateAndPushAppProject(repoName, trimmedPrompt, githubOwner)
+                appRes.onSuccess { msg ->
+                    chatViewModel.addMessage(ChatMessage("Myra", msg, providerInfo = providerInfoStr))
+                    voiceController.speak("Your background app creation job is complete and pushed to GitHub.")
+                    appDatabase.taskDao().insertTask(TaskEntity(command = prompt, status = "SUCCESS", resultMessage = msg))
+                }.onFailure { err ->
+                    val errMsg = "Background app creation failed: ${err.localizedMessage ?: err.message}"
+                    chatViewModel.addMessage(ChatMessage("Myra", errMsg, isError = true, providerInfo = providerInfoStr))
+                    voiceController.speak(errMsg)
+                }
             }
             return
         }

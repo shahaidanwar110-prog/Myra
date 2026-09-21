@@ -1,5 +1,43 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint C: Reliability, Settings Audit, Groq & OpenRouter Providers, Provider Fallback & On-Device Parser
+- **Status**: Completed & Verified
+- **What Works**:
+  - Settings Audit: Verified and saved all settings options (Google Gemini key & model, OpenAI key & model, Anthropic key & model, Groq key & model, OpenRouter key & model, GitHub PAT, active provider selection, language selection, TTS pitch & rate sliders, selected voice, favorite voices with gender tags, personality user name, style, language mix, and permissions guide link).
+  - Groq & OpenRouter Providers: Added `GroqProvider` (OpenAI-compatible, base URL `https://api.groq.com/openai/v1`) and `OpenRouterProvider` (`https://openrouter.ai/api/v1`) with editable model names (defaults: `llama-3.3-70b-versatile` and `meta-llama/llama-3.3-70b-instruct`).
+  - Automatic Fallback & Retries: Automatic provider fallback across configured providers when encountering HTTP 429 (rate limit/quota), HTTP 503 (service unavailable), or network errors, with friendly error messages instead of raw error dumps.
+  - On-Device Simple Command Parser: Handled simple commands (open app, back, home, scroll up/down, call, SMS/WhatsApp) directly via `CommandParser.kt` on-device without any AI network call.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ai/AiProvider.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/ai/CommandParser.kt`
+  - `STATUS.md`
+
+## Checkpoint B: Social & Media Tasks (Instagram Video Commenting & YouTube Song Playback)
+- **Status**: Completed & Verified
+- **What Works**:
+  - Instagram Video Commenting: Recognizes Instagram video comment commands ("Open Instagram and comment on this video"), reads active screen/caption via Accessibility Service, generates a fitting comment using AI, displays a confirmation card on screen and speaks proposed comment aloud, and posts comment on Instagram only after user confirmation.
+  - YouTube Song Intent Playback: Parses song playback queries (e.g. "Play a good song on YouTube", "Play Despacito on YouTube") via `CommandParser.kt` and launches YouTube directly with search query Intent via `PhoneControlManager.kt`.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ai/CommandParser.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/PhoneControlManager.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `STATUS.md`
+
+## Checkpoint A: Talk & Work Together, Spoken Updates, Interruption & Background Agents
+- **Status**: Completed & Verified
+- **What Works**:
+  - Spoken Progress Updates: While Myra performs phone actions or multi-step tasks, she speaks short progress updates for each step and updates the overlay chat log.
+  - Speech & Task Interruption: User can interrupt Myra by saying "stop", "cancel", "shut up", "be quiet", or submitting a new voice query. Active task coroutines and TTS speech are immediately cancelled.
+  - Background Coder & Agent Jobs: Long jobs (e.g., "make a website", "build an app") run asynchronously via `AgentOrchestrator` / `CoderAgent` in background scope. Myra gives immediate spoken acknowledgment and reports by voice and chat notification when completed.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+  - `STATUS.md`
+
 ## Checkpoint A: Always-With-You Mode (Hands-Free Assistant)
 - **Status**: Completed & Verified
 - **What Works**:

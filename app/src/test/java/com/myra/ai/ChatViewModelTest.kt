@@ -29,6 +29,7 @@ class ChatViewModelTest {
     private class TestSecureStorage : SecureStorage(DummyContext()) {
         override fun getActiveProvider(): String = "Google Gemini"
         override fun getGeminiModel(): String = "gemini-2.5-flash"
+        override fun getModel(provider: String): String = "gemini-2.5-flash"
         override fun getUserName(): String = "Friend"
         override fun getPersonalityStyle(): String = "Caring friend"
         override fun getLanguageMix(): String = "Urdu/Hindi/English Mix"

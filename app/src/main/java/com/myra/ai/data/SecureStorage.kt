@@ -34,11 +34,28 @@ open class SecureStorage(context: Context) {
     }
 
     fun saveGeminiModel(model: String) {
-        sharedPreferences.edit().putString(KEY_GEMINI_MODEL, model).apply()
+        saveModel(PROVIDER_GEMINI, model)
     }
 
     open fun getGeminiModel(): String {
-        return sharedPreferences.getString(KEY_GEMINI_MODEL, DEFAULT_GEMINI_MODEL)?.ifBlank { DEFAULT_GEMINI_MODEL } ?: DEFAULT_GEMINI_MODEL
+        return getModel(PROVIDER_GEMINI)
+    }
+
+    fun saveModel(provider: String, model: String) {
+        sharedPreferences.edit().putString(KEY_PREFIX_MODEL + provider, model).apply()
+    }
+
+    open fun getModel(provider: String): String {
+        val defaultModel = when (provider) {
+            PROVIDER_OPENAI -> DEFAULT_OPENAI_MODEL
+            PROVIDER_ANTHROPIC -> DEFAULT_ANTHROPIC_MODEL
+            PROVIDER_GROQ -> DEFAULT_GROQ_MODEL
+            PROVIDER_OPENROUTER -> DEFAULT_OPENROUTER_MODEL
+            else -> DEFAULT_GEMINI_MODEL
+        }
+        val key = KEY_PREFIX_MODEL + provider
+        val saved = sharedPreferences.getString(key, defaultModel)
+        return if (saved.isNullOrBlank()) defaultModel else saved
     }
 
     fun saveActiveProvider(provider: String) {
@@ -147,6 +164,7 @@ open class SecureStorage(context: Context) {
         private const val PREFS_FILENAME = "myra_secure_prefs"
         private const val FALLBACK_PREFS_FILENAME = "myra_fallback_prefs"
         private const val KEY_PREFIX_API = "api_key_"
+        private const val KEY_PREFIX_MODEL = "model_"
         private const val KEY_GEMINI_MODEL = "gemini_model"
         private const val KEY_ACTIVE_PROVIDER = "active_ai_provider"
         private const val KEY_LANGUAGE = "selected_language"
@@ -156,6 +174,13 @@ open class SecureStorage(context: Context) {
         const val PROVIDER_GEMINI = "Google Gemini"
         const val PROVIDER_OPENAI = "OpenAI"
         const val PROVIDER_ANTHROPIC = "Anthropic"
+        const val PROVIDER_GROQ = "Groq"
+        const val PROVIDER_OPENROUTER = "OpenRouter"
+
         const val DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+        const val DEFAULT_OPENAI_MODEL = "gpt-4o"
+        const val DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
+        const val DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+        const val DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct"
     }
 }

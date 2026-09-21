@@ -44,7 +44,15 @@ object CommandParser {
         val messageAction = parseMessageCommand(trimmed, lower)
         if (messageAction != null) return messageAction
 
-        // 6. Open app
+        // 6. YouTube Song Intent command
+        val ytPlayAction = parseYouTubePlayCommand(trimmed, lower)
+        if (ytPlayAction != null) return ytPlayAction
+
+        // 7. Instagram Comment command
+        val commentAction = parseInstagramCommentCommand(trimmed, lower)
+        if (commentAction != null) return commentAction
+
+        // 8. Open app
         val openAction = parseOpenAppCommand(trimmed, lower)
         if (openAction != null) return openAction
 
@@ -222,6 +230,57 @@ object CommandParser {
             }
         }
 
+        return null
+    }
+
+    private fun parseYouTubePlayCommand(original: String, lower: String): SystemAction? {
+        val isYt = lower.contains("youtube") || original.contains("یوٹیوب") || original.contains("یوٹیوب")
+        if (!isYt) return null
+
+        val playPatterns = listOf(
+            "play a good song", "play song", "play music", "play a song",
+            "گانا چلاؤ", "میوزک چلاؤ", "سونگ چلاؤ", "گانا سناؤ", "میوزک پلے کرو",
+            "गाने चलाओ", "म्यूजिक चलाओ", "गाना बजाओ", "म्यूजिक बजाओ"
+        )
+
+        val matchesPlay = playPatterns.any { lower.contains(it) || original.contains(it) }
+        if (matchesPlay) {
+            val playRegex = Regex("^(?:play|start|search)\\s+(.+?)\\s+(?:on|in)\\s+youtube$", RegexOption.IGNORE_CASE)
+            val match = playRegex.find(lower)
+            val rawSong = match?.groupValues?.get(1)?.trim()
+
+            val songQuery = if (!rawSong.isNullOrBlank() && !rawSong.equals("a good song", ignoreCase = true) && !rawSong.equals("song", ignoreCase = true) && !rawSong.equals("music", ignoreCase = true)) {
+                rawSong
+            } else {
+                "top trending music hits"
+            }
+
+            return SystemAction(
+                type = ActionType.OPEN_APP,
+                target = "YouTube",
+                textToType = songQuery,
+                message = "Playing '$songQuery' on YouTube..."
+            )
+        }
+        return null
+    }
+
+    private fun parseInstagramCommentCommand(original: String, lower: String): SystemAction? {
+        val patterns = listOf(
+            "open instagram and comment", "comment on this video", "comment on instagram video",
+            "comment on this reel", "comment on reel", "write a comment on this video",
+            "انسٹاگرام پر تبصرہ کرو", "انسٹاگرام پر کمنٹ کرو", "इस वीडियो पर कमेंट करो"
+        )
+
+        for (pattern in patterns) {
+            if (lower.contains(pattern) || original.contains(pattern)) {
+                return SystemAction(
+                    type = ActionType.POST_SOCIAL_MEDIA,
+                    platform = "Instagram",
+                    message = "Drafting comment for Instagram video..."
+                )
+            }
+        }
         return null
     }
 

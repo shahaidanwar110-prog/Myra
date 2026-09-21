@@ -46,9 +46,15 @@ fun SettingsScreen(
     onPreviewVoice: (voiceName: String, sampleText: String, pitch: Float, rate: Float) -> Unit = { _, _, _, _ -> }
 ) {
     var geminiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)) }
-    var geminiModel by remember { mutableStateOf(secureStorage.getGeminiModel()) }
+    var geminiModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_GEMINI)) }
     var openAiKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_OPENAI)) }
+    var openAiModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_OPENAI)) }
     var anthropicKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_ANTHROPIC)) }
+    var anthropicModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_ANTHROPIC)) }
+    var groqKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_GROQ)) }
+    var groqModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_GROQ)) }
+    var openRouterKey by remember { mutableStateOf(secureStorage.getApiKey(SecureStorage.PROVIDER_OPENROUTER)) }
+    var openRouterModel by remember { mutableStateOf(secureStorage.getModel(SecureStorage.PROVIDER_OPENROUTER)) }
     var githubToken by remember { mutableStateOf(secureStorage.getString("GITHUB_TOKEN")) }
     var activeProvider by remember { mutableStateOf(secureStorage.getActiveProvider()) }
     var selectedLanguage by remember { mutableStateOf(secureStorage.getLanguage()) }
@@ -136,11 +142,67 @@ fun SettingsScreen(
             )
 
             OutlinedTextField(
+                value = openAiModel,
+                onValueChange = { openAiModel = it },
+                label = { Text("OpenAI Model") },
+                placeholder = { Text("gpt-4o") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
                 value = anthropicKey,
                 onValueChange = { anthropicKey = it },
                 label = { Text("Anthropic (Claude) API Key") },
                 visualTransformation = PasswordVisualTransformation(),
                 leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = anthropicModel,
+                onValueChange = { anthropicModel = it },
+                label = { Text("Anthropic Model") },
+                placeholder = { Text("claude-3-5-sonnet-20241022") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = groqKey,
+                onValueChange = { groqKey = it },
+                label = { Text("Groq API Key") },
+                visualTransformation = PasswordVisualTransformation(),
+                leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = groqModel,
+                onValueChange = { groqModel = it },
+                label = { Text("Groq Model") },
+                placeholder = { Text("llama-3.3-70b-versatile") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = openRouterKey,
+                onValueChange = { openRouterKey = it },
+                label = { Text("OpenRouter API Key") },
+                visualTransformation = PasswordVisualTransformation(),
+                leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = openRouterModel,
+                onValueChange = { openRouterModel = it },
+                label = { Text("OpenRouter Model") },
+                placeholder = { Text("meta-llama/llama-3.3-70b-instruct") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -167,7 +229,9 @@ fun SettingsScreen(
                 val providers = listOf(
                     SecureStorage.PROVIDER_GEMINI,
                     SecureStorage.PROVIDER_OPENAI,
-                    SecureStorage.PROVIDER_ANTHROPIC
+                    SecureStorage.PROVIDER_ANTHROPIC,
+                    SecureStorage.PROVIDER_GROQ,
+                    SecureStorage.PROVIDER_OPENROUTER
                 )
                 providers.forEach { provider ->
                     FilterChip(
@@ -192,9 +256,15 @@ fun SettingsScreen(
 
                         // Save current keys and provider to storage first so AiProviderManager reads updated config
                         secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
-                        secureStorage.saveGeminiModel(geminiModel)
+                        secureStorage.saveModel(SecureStorage.PROVIDER_GEMINI, geminiModel)
                         secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
+                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENAI, openAiModel)
                         secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
+                        secureStorage.saveModel(SecureStorage.PROVIDER_ANTHROPIC, anthropicModel)
+                        secureStorage.saveApiKey(SecureStorage.PROVIDER_GROQ, groqKey)
+                        secureStorage.saveModel(SecureStorage.PROVIDER_GROQ, groqModel)
+                        secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENROUTER, openRouterKey)
+                        secureStorage.saveModel(SecureStorage.PROVIDER_OPENROUTER, openRouterModel)
                         secureStorage.saveActiveProvider(activeProvider)
 
                         val providerManager = AiProviderManager(secureStorage)
@@ -548,9 +618,15 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_GEMINI, geminiKey)
-                    secureStorage.saveGeminiModel(geminiModel)
+                    secureStorage.saveModel(SecureStorage.PROVIDER_GEMINI, geminiModel)
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENAI, openAiKey)
+                    secureStorage.saveModel(SecureStorage.PROVIDER_OPENAI, openAiModel)
                     secureStorage.saveApiKey(SecureStorage.PROVIDER_ANTHROPIC, anthropicKey)
+                    secureStorage.saveModel(SecureStorage.PROVIDER_ANTHROPIC, anthropicModel)
+                    secureStorage.saveApiKey(SecureStorage.PROVIDER_GROQ, groqKey)
+                    secureStorage.saveModel(SecureStorage.PROVIDER_GROQ, groqModel)
+                    secureStorage.saveApiKey(SecureStorage.PROVIDER_OPENROUTER, openRouterKey)
+                    secureStorage.saveModel(SecureStorage.PROVIDER_OPENROUTER, openRouterModel)
                     secureStorage.saveString("GITHUB_TOKEN", githubToken)
                     secureStorage.saveActiveProvider(activeProvider)
                     secureStorage.saveLanguage(selectedLanguage)
