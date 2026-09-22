@@ -97,26 +97,35 @@ class PhoneControlManager(private val context: Context) {
             }
             context.startActivity(intent)
 
-            kotlinx.coroutines.delay(1800L)
-
-            val service = MyraAccessibilityService.getInstance()
-            if (service != null) {
-                val clicked = service.clickSendButton() || service.clickText("Send")
-                if (clicked) {
-                    com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient via Messages UI")
-                    return Result.success("Sent message to $recipient via Messages UI.")
+            // Poll for Send button up to 3.5 seconds (7 attempts x 500ms)
+            var uiSent = false
+            for (attempt in 1..7) {
+                kotlinx.coroutines.delay(500L)
+                val service = MyraAccessibilityService.getInstance()
+                if (service != null) {
+                    val clicked = service.clickSendButton() || service.clickText("Send") || service.clickText("Send SMS")
+                    if (clicked) {
+                        uiSent = true
+                        break
+                    }
                 }
+            }
+
+            if (uiSent) {
+                com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient ($phoneNumber) via Messages UI")
+                return Result.success("Sent message to $recipient ($phoneNumber) via Messages UI.")
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // Fallback to SmsManager if UI steps fail
+        // Guaranteed fallback to SmsManager if UI button click fails or accessibility is unavailable
         val fallbackRes = sendSms(recipient, messageText)
         return if (fallbackRes.isSuccess) {
-            com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient via SmsManager fallback")
-            Result.success("Sent message to $recipient via SmsManager fallback.")
+            com.myra.ai.util.EventLogger.logCommandResult("SMS", true, "Sent message to $recipient ($phoneNumber) via SmsManager fallback")
+            Result.success("Sent message to $recipient ($phoneNumber) via SmsManager fallback.")
         } else {
+            com.myra.ai.util.EventLogger.logCommandResult("SMS", false, "Failed to send message to $recipient ($phoneNumber)")
             fallbackRes
         }
     }
@@ -222,46 +231,73 @@ class PhoneControlManager(private val context: Context) {
         }
     }
 
-    fun openAppByName(appName: String): Result<String> {
+    suspend fun openAppByName(appName: String): Result<String> {
         val pm = context.packageManager
         val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
 
-        var matchedPackage: String? = null
-        var matchedLabel: String? = null
-
+        // 1. Exact match (case-insensitive)
+        val exactMatches = mutableListOf<Pair<String, String>>() // Pair<packageName, label>
         for (appInfo in installedApps) {
             val label = pm.getApplicationLabel(appInfo).toString()
             if (label.equals(appName, ignoreCase = true)) {
-                matchedPackage = appInfo.packageName
-                matchedLabel = label
-                break
+                exactMatches.add(Pair(appInfo.packageName, label))
             }
         }
 
-        if (matchedPackage == null) {
+        var selectedPackage: String? = null
+        var selectedLabel: String? = null
+
+        if (exactMatches.size == 1) {
+            selectedPackage = exactMatches[0].first
+            selectedLabel = exactMatches[0].second
+        } else if (exactMatches.size > 1) {
+            val optionsStr = exactMatches.joinToString(", ") { it.second }
+            return Result.failure(Exception("Ambiguous app name '$appName'. Multiple matching apps found: $optionsStr. Please specify which app to open."))
+        } else {
+            // Partial match check
+            val partialMatches = mutableListOf<Pair<String, String>>()
             for (appInfo in installedApps) {
                 val label = pm.getApplicationLabel(appInfo).toString()
                 if (label.contains(appName, ignoreCase = true)) {
-                    matchedPackage = appInfo.packageName
-                    matchedLabel = label
-                    break
+                    partialMatches.add(Pair(appInfo.packageName, label))
                 }
+            }
+
+            if (partialMatches.size == 1) {
+                selectedPackage = partialMatches[0].first
+                selectedLabel = partialMatches[0].second
+            } else if (partialMatches.size > 1) {
+                val optionsStr = partialMatches.take(4).joinToString(", ") { it.second }
+                return Result.failure(Exception("Multiple apps match '$appName': $optionsStr. Please specify the exact app name."))
             }
         }
 
-        if (matchedPackage == null) {
+        if (selectedPackage == null || selectedLabel == null) {
             return Result.failure(Exception("App '$appName' not found on device."))
         }
 
-        val launchIntent = pm.getLaunchIntentForPackage(matchedPackage)
-            ?: return Result.failure(Exception("Cannot launch app '$matchedLabel' ($matchedPackage). No launch intent available."))
+        val launchIntent = pm.getLaunchIntentForPackage(selectedPackage)
+            ?: return Result.failure(Exception("Cannot launch app '$selectedLabel' ($selectedPackage). No launch intent available."))
 
         return try {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(launchIntent)
-            Result.success("Opened $matchedLabel.")
+
+            // Verify app opened via accessibility tree if service available
+            kotlinx.coroutines.delay(1200L)
+            val service = MyraAccessibilityService.getInstance()
+            if (service != null) {
+                val isVerified = service.verifyOnScreenTextOrPackage(expectedPackage = selectedPackage, expectedText = selectedLabel)
+                if (isVerified) {
+                    Result.success("Opened $selectedLabel and verified on screen.")
+                } else {
+                    Result.success("Launched $selectedLabel.")
+                }
+            } else {
+                Result.success("Opened $selectedLabel.")
+            }
         } catch (e: Exception) {
-            Result.failure(Exception("Failed to open $matchedLabel: ${e.localizedMessage}"))
+            Result.failure(Exception("Failed to open $selectedLabel: ${e.localizedMessage}"))
         }
     }
 

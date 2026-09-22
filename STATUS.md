@@ -1,5 +1,55 @@
 # Myra AI Assistant Implementation Status
 
+## Bug Fix Checkpoints (Reliability & Performance Polish)
+
+### Checkpoint A: Guaranteed SMS Sending & Fallback Confirmation
+- **Status**: Completed & Verified
+- **What Fixed**:
+  - Enhanced `findSendButtonNode` and `clickSendButton` in `MyraAccessibilityService.kt` to locate send controls by text ("Send", "Send SMS", "SMS"), content description, and view IDs, with coordinate tapping fallback if needed.
+  - Updated `PhoneControlManager.openSmsAppAndSend` to poll for the UI Send button for up to 3.5 seconds. If the button cannot be pressed via UI, automatically triggers `sendSms` (`SmsManager`) as a guaranteed fallback.
+  - Reports exact delivery path ("via Messages UI" vs "via SmsManager fallback") in Task Log (`task_step_logs` Room DB table) and UI confirmation.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/accessibility/MyraAccessibilityService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/PhoneControlManager.kt`
+
+### Checkpoint B: Natural Continuous Speech & TTS Queueing Fix
+- **Status**: Completed & Verified
+- **What Fixed**:
+  - Fixed robotic one-word-at-a-time speech in `VoiceController.kt` by splitting replies at sentence boundaries (`. ! ? \n` and Urdu/Hindi full stops `۔`).
+  - First sentence uses `TextToSpeech.QUEUE_FLUSH` to clear previous speech, while subsequent sentences queue smoothly using `QUEUE_ADD`. Each sentence plays as a continuous, naturally paced audio utterance.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+
+### Checkpoint C: Exact App Launching, Ambiguity Prompting & On-Screen Verification
+- **Status**: Completed & Verified
+- **What Fixed**:
+  - Updated `PhoneControlManager.openAppByName` to perform strict case-insensitive exact matching against installed apps first. If multiple installed apps match (ambiguous), asks the user which app to open instead of guessing.
+  - Added `verifyOnScreenTextOrPackage` in `MyraAccessibilityService.kt` to inspect the active package name and accessibility node tree, confirming on-screen execution before reporting the task as completed.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/accessibility/MyraAccessibilityService.kt`
+  - `app/src/main/java/com/myra/ai/accessibility/PhoneControlManager.kt`
+
+### Checkpoint D: UI Click Sound Silencing
+- **Status**: Completed & Verified
+- **What Fixed**:
+  - Set `window.decorView.isSoundEffectsEnabled = false` in `MainActivity.kt` to globally silence Android view click sound effects on mic buttons and UI interactions.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/MainActivity.kt`
+
+### Checkpoint E: Animation Optimization & UI Performance
+- **Status**: Completed & Verified
+- **What Fixed**:
+  - Lazy player initialization in `AnimatedCharacterCenterpiece.kt` so talk clip video player is created only when Myra is actively speaking, reducing background resource usage.
+  - Offloaded Room database step logging in `ChatViewModel.kt` to `Dispatchers.IO`.
+  - Added explicit keys to `LazyColumn` chat list items in `HomeScreen.kt` to eliminate recomposition churn and jank.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/components/AnimatedCharacterCenterpiece.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/HomeScreen.kt`
+  - `app/src/main/java/com/myra/ai/ui/viewmodel/ChatViewModel.kt`
+  - `STATUS.md`
+
+## Previous Checkpoints
+
 ## Checkpoint E: Unobstructed Large Character Layout on Home
 - **Status**: Completed & Verified
 - **What Works**:

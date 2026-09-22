@@ -50,7 +50,8 @@ data class ChatMessage(
     val sender: String, // "User" or "Myra"
     val text: String,
     val isError: Boolean = false,
-    val providerInfo: String? = null
+    val providerInfo: String? = null,
+    val id: String = java.util.UUID.randomUUID().toString()
 )
 
 data class ActionConfirmation(
@@ -461,7 +462,10 @@ fun HomeTabContent(
                     }
                 }
             } else {
-                items(chatMessages) { msg ->
+                items(
+                    items = chatMessages,
+                    key = { msg -> msg.id }
+                ) { msg ->
                     ChatMessageItem(msg)
                 }
 
@@ -669,7 +673,10 @@ fun ChatTabContent(
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(chatMessages) { msg ->
+            items(
+                items = chatMessages,
+                key = { msg -> msg.id }
+            ) { msg ->
                 ChatMessageItem(msg)
             }
 

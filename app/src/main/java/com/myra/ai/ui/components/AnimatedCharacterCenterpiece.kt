@@ -101,27 +101,36 @@ fun AnimatedCharacterCenterpiece(
         }
     }
 
-    // ExoPlayer for talk clip
-    val talkPlayer = remember {
-        try {
-            ExoPlayer.Builder(context).build().apply {
-                val mediaItem = MediaItem.fromUri(Uri.parse("asset:///myra_talk.mp4"))
-                setMediaItem(mediaItem)
-                repeatMode = Player.REPEAT_MODE_ONE
-                volume = 0f
-                addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) {
-                        Log.e(TAG, "Talk player error", error)
-                        isTalkError = true
-                    }
-                })
-                prepare()
-                playWhenReady = true
+    // Lazy initialization of talkPlayer: only create/play video when Myra is speaking
+    val talkPlayer = remember(isSpeaking) {
+        if (!isSpeaking) null
+        else {
+            try {
+                ExoPlayer.Builder(context).build().apply {
+                    val mediaItem = MediaItem.fromUri(Uri.parse("asset:///myra_talk.mp4"))
+                    setMediaItem(mediaItem)
+                    repeatMode = Player.REPEAT_MODE_ONE
+                    volume = 0f
+                    addListener(object : Player.Listener {
+                        override fun onPlayerError(error: PlaybackException) {
+                            Log.e(TAG, "Talk player error", error)
+                            isTalkError = true
+                        }
+                    })
+                    prepare()
+                    playWhenReady = true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create talk player", e)
+                isTalkError = true
+                null
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create talk player", e)
-            isTalkError = true
-            null
+        }
+    }
+
+    DisposableEffect(talkPlayer) {
+        onDispose {
+            talkPlayer?.release()
         }
     }
 
@@ -144,7 +153,6 @@ fun AnimatedCharacterCenterpiece(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             idlePlayer?.release()
-            talkPlayer?.release()
         }
     }
 

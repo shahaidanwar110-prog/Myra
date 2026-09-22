@@ -105,6 +105,16 @@ class MyraAccessibilityService : AccessibilityService() {
                 }
                 curr = curr.parent
             }
+            if (!clicked) {
+                // Fallback: click center coordinates of send button node
+                val bounds = Rect()
+                sendNode.getBoundsInScreen(bounds)
+                if (!bounds.isEmpty && bounds.width() > 0 && bounds.height() > 0) {
+                    val cx = bounds.centerX().toFloat()
+                    val cy = bounds.centerY().toFloat()
+                    clicked = clickCoordinates(cx, cy)
+                }
+            }
             sendNode.recycle()
             clicked
         } else {
@@ -115,11 +125,24 @@ class MyraAccessibilityService : AccessibilityService() {
     }
 
     private fun findSendButtonNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val text = node.text?.toString() ?: node.contentDescription?.toString()
+        val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
         val viewId = node.viewIdResourceName ?: ""
-        if ((text != null && (text.equals("Send", ignoreCase = true) || text.equals("Send message", ignoreCase = true))) ||
-            viewId.contains("send", ignoreCase = true)
-        ) {
+
+        val isSendText = text.equals("Send", ignoreCase = true) ||
+                text.equals("Send message", ignoreCase = true) ||
+                text.equals("Send SMS", ignoreCase = true) ||
+                text.equals("SMS", ignoreCase = true)
+
+        val isSendDesc = desc.contains("Send", ignoreCase = true) ||
+                desc.contains("Send message", ignoreCase = true) ||
+                desc.contains("Send SMS", ignoreCase = true) ||
+                desc.contains("Submit", ignoreCase = true)
+
+        val isSendId = viewId.contains("send", ignoreCase = true) ||
+                viewId.contains("submit", ignoreCase = true)
+
+        if (isSendText || isSendDesc || isSendId) {
             return node
         }
         for (i in 0 until node.childCount) {
@@ -314,6 +337,35 @@ class MyraAccessibilityService : AccessibilityService() {
             return dispatchGesture(gesture, null, null)
         }
         return false
+    }
+
+    fun getActivePackageName(): String? {
+        val rootNode = rootInActiveWindow ?: return null
+        val pkg = rootNode.packageName?.toString()
+        rootNode.recycle()
+        return pkg
+    }
+
+    fun verifyOnScreenTextOrPackage(expectedPackage: String? = null, expectedText: String? = null): Boolean {
+        val rootNode = rootInActiveWindow ?: return false
+        val activePkg = rootNode.packageName?.toString()
+
+        var pkgMatches = false
+        if (!expectedPackage.isNullOrBlank() && activePkg != null) {
+            pkgMatches = activePkg.contains(expectedPackage, ignoreCase = true)
+        }
+
+        var textMatches = false
+        if (!expectedText.isNullOrBlank()) {
+            val foundNode = findClickableNodeByText(rootNode, expectedText)
+            if (foundNode != null) {
+                textMatches = true
+                foundNode.recycle()
+            }
+        }
+
+        rootNode.recycle()
+        return pkgMatches || textMatches
     }
 
     fun updateOverlayAudioState(isListening: Boolean, isSpeaking: Boolean) {
