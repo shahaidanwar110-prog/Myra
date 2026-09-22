@@ -558,12 +558,20 @@ fun SettingsScreen(
                     label = { Text("3D Glowing Orb (Default)") }
                 )
                 FilterChip(
-                    selected = centerpieceStyle == "girl",
+                    selected = centerpieceStyle == "character" || centerpieceStyle == "girl",
                     onClick = {
-                        centerpieceStyle = "girl"
-                        secureStorage.saveCenterpieceStyle("girl")
+                        centerpieceStyle = "character"
+                        secureStorage.saveCenterpieceStyle("character")
                     },
-                    label = { Text("Myra Character (Girl)") }
+                    label = { Text("Character Video") }
+                )
+                FilterChip(
+                    selected = centerpieceStyle == "both",
+                    onClick = {
+                        centerpieceStyle = "both"
+                        secureStorage.saveCenterpieceStyle("both")
+                    },
+                    label = { Text("Both (Orb + Character)") }
                 )
             }
 
