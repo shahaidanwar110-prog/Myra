@@ -29,14 +29,40 @@ class OverlayForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            val errMsg = "Cannot start overlay service: 'Display over other apps' permission is missing."
+            com.myra.ai.util.DiagnosticsHelper.lastError = errMsg
+            com.myra.ai.util.EventLogger.logEvent(
+                eventType = "PERMISSION_DENIED",
+                tag = "OverlayForegroundService",
+                message = errMsg,
+                reason = "SYSTEM_ALERT_WINDOW permission missing"
+            )
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
-        val serviceInstance = MyraAccessibilityService.getInstance()
-        if (serviceInstance != null) {
-            AssistantOverlayManager.showOverlay(serviceInstance)
-        } else {
-            AssistantOverlayManager.showOverlay(this)
+        try {
+            val notification = createNotification()
+            startForeground(NOTIFICATION_ID, notification)
+
+            val serviceInstance = MyraAccessibilityService.getInstance()
+            if (serviceInstance != null) {
+                AssistantOverlayManager.showOverlay(serviceInstance)
+            } else {
+                AssistantOverlayManager.showOverlay(this)
+            }
+        } catch (e: Exception) {
+            val errMsg = "Failed to start overlay service: ${e.localizedMessage ?: e.message}"
+            com.myra.ai.util.DiagnosticsHelper.lastError = errMsg
+            com.myra.ai.util.EventLogger.logEvent(
+                eventType = "SERVICE_ERROR",
+                tag = "OverlayForegroundService",
+                message = errMsg,
+                reason = e.stackTraceToString()
+            )
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         return START_STICKY
@@ -107,11 +133,33 @@ class OverlayForegroundService : Service() {
         const val ACTION_STOP_OVERLAY = "com.myra.ai.ACTION_STOP_OVERLAY"
 
         fun start(context: Context) {
-            val intent = Intent(context, OverlayForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                val errMsg = "Cannot start floating overlay: 'Display over other apps' permission is required."
+                com.myra.ai.util.DiagnosticsHelper.lastError = errMsg
+                com.myra.ai.util.EventLogger.logEvent(
+                    eventType = "PERMISSION_DENIED",
+                    tag = "OverlayForegroundService",
+                    message = errMsg
+                )
+                return
+            }
+
+            try {
+                val intent = Intent(context, OverlayForegroundService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                val errMsg = "Overlay service auto-start failed: ${e.localizedMessage ?: e.message}"
+                com.myra.ai.util.DiagnosticsHelper.lastError = errMsg
+                com.myra.ai.util.EventLogger.logEvent(
+                    eventType = "SERVICE_ERROR",
+                    tag = "OverlayForegroundService",
+                    message = errMsg,
+                    reason = e.stackTraceToString()
+                )
             }
         }
 

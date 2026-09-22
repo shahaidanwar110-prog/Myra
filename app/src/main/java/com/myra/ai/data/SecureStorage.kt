@@ -63,10 +63,13 @@ open class SecureStorage(context: Context) {
     }
 
     open fun getActiveProvider(): String {
+        val groqKey = getApiKey(PROVIDER_GROQ)
+        if (groqKey.isNotBlank()) return PROVIDER_GROQ
+
         val stored = sharedPreferences.getString(KEY_ACTIVE_PROVIDER, null)
         if (stored != null) return stored
-        val groqKey = getApiKey(PROVIDER_GROQ)
-        return if (groqKey.isNotBlank()) PROVIDER_GROQ else PROVIDER_GEMINI
+
+        return PROVIDER_GEMINI
     }
 
     fun saveLanguage(languageCode: String) {

@@ -1,5 +1,57 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint E: Unobstructed Large Character Layout on Home
+- **Status**: Completed & Verified
+- **What Works**:
+  - Unobstructed Large Character Centerpiece: Rendered Myra character centerpiece significantly larger (300dp height) and unobstructed on Home screen.
+  - Soft Ethereal Radial Background Glow: Positioned orb light aura behind character as a soft glowing background radial gradient (260dp) rather than a small enclosing circle.
+  - Responsive Scaling: Maintained responsive layout scaling across all display dimensions.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/ui/components/AnimatedCharacterCenterpiece.kt`
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `STATUS.md`
+
+## Checkpoint D: Foreground Service Auto-Start & Diagnostics Failure Reporting
+- **Status**: Completed & Verified
+- **What Works**:
+  - Auto-Start Foreground Overlay Service: Safe programmatic auto-start for `OverlayForegroundService` when required (Screen button, background mode) with pre-start permission checks.
+  - Granular Failure Diagnostics: Captures exact failure reasons (e.g. missing `SYSTEM_ALERT_WINDOW` display-over-other-apps permission or service start exceptions) in `DiagnosticsHelper.lastError` and `EventLogger`, displayed in `DiagnosticsScreen`.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/accessibility/OverlayForegroundService.kt`
+  - `STATUS.md`
+
+## Checkpoint C: Urdu Text Normalization & Expressive Voice Fallback Diagnostics
+- **Status**: Completed & Verified
+- **What Works**:
+  - Urdu/Hinglish Text Normalization (`normalizeTextForSpeech`): Normalizes numbers (0-10) and common Urdu/Hinglish mispronunciations (e.g. "tayyar"/"tyar" -> "tayaar", "shukriya" -> "shuk-ri-ya") before TTS rendering.
+  - Urdu/Hindi Voice Preference: Automatically prefers Urdu (`ur`) or Hindi (`hi`) voice on device when language is set to `ur-PK` or `hi-IN`.
+  - Expressive Voice Fallback Diagnostics: Explicitly captures exact reason for fallback to Phone TTS in `DiagnosticsHelper.lastError` (disabled in Settings, missing API key, rate limit > 3/min, HTTP request failure).
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `STATUS.md`
+
+## Checkpoint B: Optimize Provider Speed, Groq Defaulting & Fast Fallback
+- **Status**: Completed & Verified
+- **What Works**:
+  - Groq Active Provider Auto-Default: Defaults active AI provider to Groq whenever a Groq API key exists (`SecureStorage.getActiveProvider()`), using ultra-fast Llama-3.3-70b for conversational responses and command parsing.
+  - Gemini Reserved for Vision & TTS: Keeps Gemini as dedicated engine for screen vision tasks (`describeScreen`) and expressive TTS voice mode.
+  - Zero-Wait Instant Fallback: Removed the 60-second rate limiter delay. Upon encountering HTTP 429 rate limit or HTTP error, immediately falls back to the next configured provider without silent waiting periods.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/data/SecureStorage.kt`
+  - `app/src/main/java/com/myra/ai/ai/AiProvider.kt`
+  - `STATUS.md`
+
+## Checkpoint A: Fix Self-Talking Bug & Speech Recognizer Isolation
+- **Status**: Completed & Verified
+- **What Works**:
+  - TTS Isolation & Speech Recognition Pause: Pauses `SpeechRecognizer` (`stopListening()`) whenever Myra starts speaking via Text-To-Speech (`speak`, `speakExpressiveOrFallback`, `playAudioFile`).
+  - Strict Speech Lock: Prevents starting `SpeechRecognizer` while `_isSpeaking.value` is true.
+  - Single Utterance Invocation: Ensures AI prompt processing is invoked exactly once per completed user utterance result and stops listening while processing, preventing loop self-triggering or hearing own voice.
+- **Files Pushed**:
+  - `app/src/main/java/com/myra/ai/voice/VoiceController.kt`
+  - `STATUS.md`
+
 ## Checkpoint D: Animated Character Video Centerpiece with Chroma Key & Media3 ExoPlayer
 - **Status**: Completed & Verified
 - **What Works**:
