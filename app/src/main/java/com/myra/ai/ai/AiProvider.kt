@@ -509,36 +509,12 @@ class OpenRouterProvider(
 }
 
 class RateLimiter {
-    private val rateLimitMutex = Mutex()
     private val inFlightMutex = Mutex()
-    private val requestTimestamps = mutableMapOf<String, MutableList<Long>>()
 
     suspend fun <T> runWithRateLimit(
-        providerName: String,
-        onWaitingNotice: ((String) -> Unit)? = null,
         block: suspend () -> Result<T>
     ): Result<T> {
         return inFlightMutex.withLock {
-            rateLimitMutex.withLock {
-                val now = System.currentTimeMillis()
-                val timestamps = requestTimestamps.getOrPut(providerName) { mutableListOf() }
-
-                // Keep only timestamps within the last 60 seconds
-                timestamps.removeAll { now - it >= 60_000L }
-
-                if (timestamps.size >= 4) {
-                    val oldestInWindow = timestamps.first()
-                    val waitMs = 60_000L - (now - oldestInWindow)
-                    if (waitMs > 0) {
-                        val waitSeconds = (waitMs / 1000L).coerceAtLeast(1L)
-                        onWaitingNotice?.invoke("Waiting for provider quota ($waitSeconds seconds)")
-                        kotlinx.coroutines.delay(waitMs)
-                    }
-                }
-
-                // Record current request time
-                requestTimestamps.getOrPut(providerName) { mutableListOf() }.add(System.currentTimeMillis())
-            }
             block()
         }
     }
@@ -661,7 +637,7 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
         val primaryName = secureStorage.getActiveProvider()
         val primaryProvider = getProvider(primaryName)
 
-        val primaryResult = rateLimiter.runWithRateLimit(primaryName, onQuotaWaitListener) {
+        val primaryResult = rateLimiter.runWithRateLimit {
             primaryProvider.generateText(prompt, systemPrompt)
         }
         if (primaryResult.isSuccess) {
@@ -683,7 +659,7 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
 
         for (fallbackName in configuredFallbacks) {
             val fallbackProvider = getProvider(fallbackName)
-            val fallbackResult = rateLimiter.runWithRateLimit(fallbackName, onQuotaWaitListener) {
+            val fallbackResult = rateLimiter.runWithRateLimit {
                 fallbackProvider.generateText(prompt, systemPrompt)
             }
             if (fallbackResult.isSuccess) {
@@ -699,7 +675,7 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
         val primaryName = secureStorage.getActiveProvider()
         val primaryProvider = getProvider(primaryName)
 
-        val primaryResult = rateLimiter.runWithRateLimit(primaryName, onQuotaWaitListener) {
+        val primaryResult = rateLimiter.runWithRateLimit {
             primaryProvider.describeScreen(image, screenTreeText, prompt)
         }
         if (primaryResult.isSuccess) {
@@ -720,7 +696,7 @@ open class AiProviderManager(private val secureStorage: SecureStorage) {
 
         for (fallbackName in configuredFallbacks) {
             val fallbackProvider = getProvider(fallbackName)
-            val fallbackResult = rateLimiter.runWithRateLimit(fallbackName, onQuotaWaitListener) {
+            val fallbackResult = rateLimiter.runWithRateLimit {
                 fallbackProvider.describeScreen(image, screenTreeText, prompt)
             }
             if (fallbackResult.isSuccess) {

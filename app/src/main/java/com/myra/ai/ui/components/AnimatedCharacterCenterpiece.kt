@@ -152,20 +152,20 @@ fun AnimatedCharacterCenterpiece(
         modifier = modifier
             .scale(pulseScale)
             .fillMaxWidth()
-            .height(230.dp),
+            .height(300.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Soft radial glowing aura background behind character
+        // Soft radial glowing aura background behind character (ethereal glow)
         Box(
             modifier = Modifier
-                .size(230.dp)
+                .size(260.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            GoldPrimary.copy(alpha = if (isSpeaking) 0.45f else 0.30f),
-                            PrimaryPurple.copy(alpha = if (isSpeaking) 0.35f else 0.22f),
-                            VioletAccent.copy(alpha = 0.15f),
+                            GoldPrimary.copy(alpha = if (isSpeaking) 0.50f else 0.32f),
+                            PrimaryPurple.copy(alpha = if (isSpeaking) 0.40f else 0.25f),
+                            VioletAccent.copy(alpha = 0.18f),
                             Color.Transparent
                         )
                     )
@@ -178,10 +178,12 @@ fun AnimatedCharacterCenterpiece(
                 painter = painterResource(id = R.drawable.myra_logo),
                 contentDescription = "Myra Character",
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.height(210.dp)
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(8.dp)
             )
         } else {
-            // Cross-fading chroma-key video layers
+            // Cross-fading chroma-key video layers rendered large and unobstructed
             Box(
                 modifier = Modifier
                     .fillMaxHeight()

@@ -119,7 +119,7 @@ class VoiceController(
                         _isListening.value = false
                         if (isLiveMode) {
                             mainHandler.postDelayed({
-                                if (isLiveMode) startListening()
+                                if (isLiveMode && !_isSpeaking.value) startListening()
                             }, 1000L)
                         }
                     }
@@ -127,21 +127,23 @@ class VoiceController(
                     override fun onResults(results: Bundle?) {
                         _isListening.value = false
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            val text = matches[0]
+                        val text = matches?.firstOrNull()?.trim() ?: ""
+                        if (text.isNotBlank()) {
                             _spokenText.value = text
                             if (isLiveMode) {
                                 resetSilenceTimer()
                             }
                             // Interruption shortcut: if user says stop/cancel, immediately stop TTS
-                            val cleanText = text.trim().lowercase()
+                            val cleanText = text.lowercase()
                             if (cleanText == "stop" || cleanText == "cancel" || cleanText == "shut up" || cleanText == "be quiet" || cleanText == "stop listening") {
                                 stopSpeaking()
                             }
+                            // Pause speech recognizer while processing user input and until TTS completes
+                            stopListening()
                             onSpeechResultListener?.invoke(text)
                         } else if (isLiveMode) {
                             mainHandler.postDelayed({
-                                if (isLiveMode) startListening()
+                                if (isLiveMode && !_isSpeaking.value) startListening()
                             }, 500L)
                         }
                     }
@@ -160,6 +162,11 @@ class VoiceController(
     }
 
     fun startListening() {
+        if (_isSpeaking.value) {
+            _isListening.value = false
+            return
+        }
+
         if (speechRecognizer == null) initSpeechRecognizer()
 
         val langCode = secureStorage.getLanguage()
@@ -193,6 +200,7 @@ class VoiceController(
             textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     _isSpeaking.value = true
+                    mainHandler.post { stopListening() }
                 }
 
                 override fun onDone(utteranceId: String?) {
@@ -201,7 +209,7 @@ class VoiceController(
                         if (isLiveMode) {
                             mainHandler.postDelayed({
                                 if (isLiveMode && !_isSpeaking.value) startListening()
-                            }, 400L)
+                            }, 500L)
                         }
                     }
                 }
@@ -213,7 +221,7 @@ class VoiceController(
                         if (isLiveMode) {
                             mainHandler.postDelayed({
                                 if (isLiveMode && !_isSpeaking.value) startListening()
-                            }, 400L)
+                            }, 500L)
                         }
                     }
                 }
@@ -286,7 +294,51 @@ class VoiceController(
                 textToSpeech?.setLanguage(locale)
             }
         }
+
+        // Prefer an Urdu or Hindi capable voice if available when language is ur-PK or hi-IN
+        if (langTag == "ur-PK" || langTag == "hi-IN") {
+            val voices = textToSpeech?.voices
+            if (!voices.isNullOrEmpty()) {
+                val urduVoice = voices.find { it.locale?.language == "ur" }
+                val hindiVoice = voices.find { it.locale?.language == "hi" }
+                val preferredVoice = urduVoice ?: hindiVoice
+                if (preferredVoice != null) {
+                    textToSpeech?.voice = preferredVoice
+                }
+            }
+        }
+
         applyTtsSettings()
+    }
+
+    fun normalizeTextForSpeech(input: String): String {
+        if (input.isBlank()) return input
+
+        var normalized = input
+
+        // 1. Common Urdu/Hinglish mispronunciation fixes
+        normalized = normalized.replace(Regex("(?i)\\btayyar\\b"), "tayaar")
+        normalized = normalized.replace(Regex("(?i)\\btyar\\b"), "tayaar")
+        normalized = normalized.replace(Regex("(?i)\\bshukriya\\b"), "shuk-ri-ya")
+        normalized = normalized.replace(Regex("(?i)\\bkhushamdeed\\b"), "khush-am-deed")
+
+        // 2. Convert digits in Urdu/Hindi/Hinglish context to clear words for natural pronunciation
+        val langTag = secureStorage.getLanguage()
+        if (langTag == "ur-PK" || langTag == "hi-IN") {
+            normalized = normalized.replace(Regex("\\b0\\b"), "zero")
+            normalized = normalized.replace(Regex("\\b1\\b"), "ek")
+            normalized = normalized.replace(Regex("\\b2\\b"), "do")
+            normalized = normalized.replace(Regex("\\b3\\b"), "teen")
+            normalized = normalized.replace(Regex("\\b4\\b"), "chaar")
+            normalized = normalized.replace(Regex("\\b5\\b"), "paanch")
+            normalized = normalized.replace(Regex("\\b6\\b"), "chhey")
+            normalized = normalized.replace(Regex("\\b7\\b"), "saat")
+            normalized = normalized.replace(Regex("\\b8\\b"), "aath")
+            normalized = normalized.replace(Regex("\\b9\\b"), "nau")
+            normalized = normalized.replace(Regex("\\b10\\b"), "das")
+        }
+
+        return normalized
     }
 
     fun speak(text: String) {
@@ -295,7 +347,8 @@ class VoiceController(
         updateTtsLanguage()
         applyTtsSettings()
 
-        val chunks = text.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+        val normalized = normalizeTextForSpeech(text)
+        val chunks = normalized.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
         if (chunks.isEmpty()) return
 
         val baseId = "myra_tts_${System.currentTimeMillis()}"
@@ -326,34 +379,48 @@ class VoiceController(
     fun speakExpressiveOrFallback(text: String, emotion: String? = null, overrideVoice: String? = null) {
         if (text.isBlank()) return
         stopSpeaking()
+        stopListening()
+
+        val normalized = normalizeTextForSpeech(text)
 
         val isExpressiveEnabled = secureStorage.isExpressiveVoiceEnabled()
         val geminiKey = secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)
 
-        if (isExpressiveEnabled && geminiKey.isNotBlank()) {
-            val now = System.currentTimeMillis()
-            synchronized(geminiTtsTimestamps) {
-                geminiTtsTimestamps.removeAll { now - it >= 60_000L }
-            }
-
-            if (geminiTtsTimestamps.size < 3) {
-                synchronized(geminiTtsTimestamps) {
-                    geminiTtsTimestamps.add(now)
-                }
-
-                CoroutineScope(Dispatchers.IO).launch {
-                    val success = trySpeakGeminiTts(text, emotion, overrideVoice)
-                    if (!success) {
-                        withContext(Dispatchers.Main) {
-                            speak(text)
-                        }
-                    }
-                }
-                return
-            }
+        if (!isExpressiveEnabled) {
+            com.myra.ai.util.DiagnosticsHelper.lastError = "Expressive Gemini Voice Mode disabled in Settings (using Phone TTS)."
+            speak(normalized)
+            return
         }
 
-        speak(text)
+        if (geminiKey.isBlank()) {
+            com.myra.ai.util.DiagnosticsHelper.lastError = "Expressive Gemini Voice Mode requires a Gemini API key in Settings."
+            speak(normalized)
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        synchronized(geminiTtsTimestamps) {
+            geminiTtsTimestamps.removeAll { now - it >= 60_000L }
+        }
+
+        if (geminiTtsTimestamps.size >= 3) {
+            com.myra.ai.util.DiagnosticsHelper.lastError = "Expressive Gemini Voice Mode rate limit reached (max 3 req/min). Falling back to Phone TTS."
+            speak(normalized)
+            return
+        }
+
+        synchronized(geminiTtsTimestamps) {
+            geminiTtsTimestamps.add(now)
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val success = trySpeakGeminiTts(normalized, emotion, overrideVoice)
+            if (!success) {
+                withContext(Dispatchers.Main) {
+                    speak(normalized)
+                }
+            }
+        }
     }
 
     fun previewGeminiVoice(voiceName: String, sampleText: String) {
@@ -400,7 +467,10 @@ class VoiceController(
             val headers = mapOf("Content-Type" to "application/json")
             val (code, responseBody) = httpPost(urlStr, headers, body.toString())
 
-            if (code !in 200..299 || responseBody.isNullOrBlank()) return@withContext false
+            if (code !in 200..299 || responseBody.isNullOrBlank()) {
+                com.myra.ai.util.DiagnosticsHelper.lastError = "Gemini TTS API request failed (HTTP $code). Falling back to Phone TTS."
+                return@withContext false
+            }
 
             val obj = JSONObject(responseBody)
             val candidates = obj.optJSONArray("candidates") ?: return@withContext false
