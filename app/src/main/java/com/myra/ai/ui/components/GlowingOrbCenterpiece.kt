@@ -4,7 +4,6 @@ import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,13 +15,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.myra.ai.R
 import com.myra.ai.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.sin
@@ -101,6 +96,42 @@ fun GlowingOrbCenterpiece(
     centerpieceStyle: String = "orb",
     modifier: Modifier = Modifier
 ) {
+    when (centerpieceStyle.lowercase()) {
+        "character", "girl" -> {
+            // Animated Myra Character Video (with Chroma Key & Cross-Fade)
+            AnimatedCharacterCenterpiece(
+                isSpeaking = isSpeaking,
+                modifier = modifier
+            )
+        }
+        "both" -> {
+            // Both: 3D Glowing Orb in background with Animated Character Video layered on top!
+            Box(
+                modifier = modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                OrbGraphicContent(isSpeaking = isSpeaking)
+                AnimatedCharacterCenterpiece(
+                    isSpeaking = isSpeaking,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        else -> {
+            // Default 3D Glowing Orb Centerpiece
+            OrbGraphicContent(
+                isSpeaking = isSpeaking,
+                modifier = modifier
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrbGraphicContent(
+    isSpeaking: Boolean,
+    modifier: Modifier = Modifier
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "orb_centerpiece")
 
     val pulseScale by infiniteTransition.animateFloat(
@@ -123,230 +154,184 @@ fun GlowingOrbCenterpiece(
         label = "timeAnim"
     )
 
-    if (centerpieceStyle == "girl") {
-        // Option "Myra Character (Girl)" blended smoothly without a sharp rectangle
-        Box(
-            modifier = modifier
-                .scale(pulseScale)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            // Soft radial glowing aura
-            Box(
-                modifier = Modifier
-                    .size(230.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                GoldPrimary.copy(alpha = 0.35f),
-                                PrimaryPurple.copy(alpha = 0.30f),
-                                VioletAccent.copy(alpha = 0.15f),
-                                Color.Transparent
-                            )
-                        )
-                    )
+    val lightBubbles = remember {
+        val rand = Random(123)
+        val colors = listOf(PrimaryPurple, SecondaryCyan, GoldPrimary, VioletAccent, Color(0xFFEC4899))
+        List(12) { id ->
+            LightBubble(
+                id = id,
+                xOffsetRatio = (rand.nextFloat() - 0.5f) * 1.2f,
+                startProgress = rand.nextFloat(),
+                radiusDp = rand.nextFloat() * 10f + 6f,
+                color = colors[id % colors.size]
             )
-
-            // Girl image blended without a sharp box border using soft radial gradient mask overlay
-            Box(
-                modifier = Modifier
-                    .height(210.dp)
-                    .wrapContentWidth()
-                    .clip(CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.myra_logo),
-                    contentDescription = "Myra Girl Character",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.height(205.dp)
-                )
-            }
         }
-    } else {
-        // 3D Glowing Orb Centerpiece
-        val lightBubbles = remember {
-            val rand = Random(123)
-            val colors = listOf(PrimaryPurple, SecondaryCyan, GoldPrimary, VioletAccent, Color(0xFFEC4899))
-            List(12) { id ->
-                LightBubble(
-                    id = id,
-                    xOffsetRatio = (rand.nextFloat() - 0.5f) * 1.2f,
-                    startProgress = rand.nextFloat(),
-                    radiusDp = rand.nextFloat() * 10f + 6f,
-                    color = colors[id % colors.size]
-                )
-            }
-        }
+    }
 
-        Box(
-            modifier = modifier
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        // Rising light bubbles around orb while speaking / active
+        Canvas(
+            modifier = Modifier.size(280.dp)
         ) {
-            // Rising light bubbles around orb while speaking / active
-            Canvas(
-                modifier = Modifier
-                    .size(280.dp)
-            ) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                val baseRadius = size.width * 0.35f
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val baseRadius = size.width * 0.35f
 
-                lightBubbles.forEach { bubble ->
-                    val progress = (bubble.startProgress + timeAnim * (if (isSpeaking) 2.5f else 1.0f)) % 1.0f
-                    val bubbleY = cy + baseRadius * 0.2f - progress * baseRadius * 2.2f
-                    val bubbleX = cx + bubble.xOffsetRatio * baseRadius * (1f + progress * 0.5f)
-                    val alpha = (1.0f - progress).coerceIn(0f, 0.85f) * (if (isSpeaking) 0.9f else 0.4f)
-                    val rPx = bubble.radiusDp * density
+            lightBubbles.forEach { bubble ->
+                val progress = (bubble.startProgress + timeAnim * (if (isSpeaking) 2.5f else 1.0f)) % 1.0f
+                val bubbleY = cy + baseRadius * 0.2f - progress * baseRadius * 2.2f
+                val bubbleX = cx + bubble.xOffsetRatio * baseRadius * (1f + progress * 0.5f)
+                val alpha = (1.0f - progress).coerceIn(0f, 0.85f) * (if (isSpeaking) 0.9f else 0.4f)
+                val rPx = bubble.radiusDp * density
 
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                bubble.color.copy(alpha = alpha),
-                                bubble.color.copy(alpha = alpha * 0.2f),
-                                Color.Transparent
-                            ),
-                            center = Offset(bubbleX, bubbleY),
-                            radius = rPx
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            bubble.color.copy(alpha = alpha),
+                            bubble.color.copy(alpha = alpha * 0.2f),
+                            Color.Transparent
                         ),
                         center = Offset(bubbleX, bubbleY),
                         radius = rPx
-                    )
-                }
+                    ),
+                    center = Offset(bubbleX, bubbleY),
+                    radius = rPx
+                )
             }
+        }
 
-            // Outer pulse glow halo behind orb
-            Box(
-                modifier = Modifier
-                    .scale(pulseScale)
-                    .size(240.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                PrimaryPurple.copy(alpha = if (isSpeaking) 0.5f else 0.35f),
-                                SecondaryCyan.copy(alpha = if (isSpeaking) 0.4f else 0.25f),
-                                GoldPrimary.copy(alpha = 0.15f),
-                                Color.Transparent
-                            )
+        // Outer pulse glow halo behind orb
+        Box(
+            modifier = Modifier
+                .scale(pulseScale)
+                .size(240.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            PrimaryPurple.copy(alpha = if (isSpeaking) 0.5f else 0.35f),
+                            SecondaryCyan.copy(alpha = if (isSpeaking) 0.4f else 0.25f),
+                            GoldPrimary.copy(alpha = 0.15f),
+                            Color.Transparent
                         )
                     )
-            )
+                )
+        )
 
-            // 3D Glowing Orb Canvas with AGSL Shader or Layered Fallback
-            val agslShader = remember {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    try {
-                        RuntimeShader(AGSL_ORB_SHADER)
-                    } catch (e: Exception) {
-                        null
+        // 3D Glowing Orb Canvas with AGSL Shader or Layered Fallback
+        val agslShader = remember {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                try {
+                    RuntimeShader(AGSL_ORB_SHADER)
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+        }
+
+        Canvas(
+            modifier = Modifier
+                .scale(pulseScale)
+                .size(220.dp)
+        ) {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h / 2f
+            val radius = minOf(w, h) / 2f - 8f
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && agslShader != null) {
+                try {
+                    agslShader.setFloatUniform("iResolution", w, h)
+                    agslShader.setFloatUniform("iTime", timeAnim * 12f)
+                    agslShader.setFloatUniform("iPulse", if (isSpeaking) 1.15f else 1.0f)
+
+                    drawIntoCanvas { canvas ->
+                        val nativePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            shader = agslShader
+                        }
+                        canvas.nativeCanvas.drawCircle(cx, cy, radius, nativePaint)
                     }
-                } else null
+                    return@Canvas
+                } catch (e: Exception) {
+                    // Fallback
+                }
             }
 
-            Canvas(
-                modifier = Modifier
-                    .scale(pulseScale)
-                    .size(220.dp)
-            ) {
-                val w = size.width
-                val h = size.height
-                val cx = w / 2f
-                val cy = h / 2f
-                val radius = minOf(w, h) / 2f - 8f
+            // Fallback for older Android versions (< 13)
+            // 1. Plasma Core
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        SecondaryCyan,
+                        PrimaryPurple,
+                        VioletAccent,
+                        Color(0xFFEC4899),
+                        GoldPrimary
+                    ),
+                    center = Offset(cx - radius * 0.2f, cy - radius * 0.2f),
+                    radius = radius
+                ),
+                center = Offset(cx, cy),
+                radius = radius
+            )
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && agslShader != null) {
-                    try {
-                        agslShader.setFloatUniform("iResolution", w, h)
-                        agslShader.setFloatUniform("iTime", timeAnim * 12f)
-                        agslShader.setFloatUniform("iPulse", if (isSpeaking) 1.15f else 1.0f)
+            // 2. Rotating Gradient Overlay
+            val colors = intArrayOf(
+                android.graphics.Color.parseColor("#7C3AED"),
+                android.graphics.Color.parseColor("#06B6D4"),
+                android.graphics.Color.parseColor("#EC4899"),
+                android.graphics.Color.parseColor("#FFD700"),
+                android.graphics.Color.parseColor("#7C3AED")
+            )
+            val sweepGrad = android.graphics.SweepGradient(cx, cy, colors, null)
+            val matrix = android.graphics.Matrix().apply {
+                setRotate(timeAnim * 360f, cx, cy)
+            }
+            sweepGrad.setLocalMatrix(matrix)
 
-                        drawIntoCanvas { canvas ->
-                            val nativePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                                shader = agslShader
-                            }
-                            canvas.nativeCanvas.drawCircle(cx, cy, radius, nativePaint)
-                        }
-                        return@Canvas
-                    } catch (e: Exception) {
-                        // Fallback
-                    }
+            drawIntoCanvas { canvas ->
+                val sweepPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = sweepGrad
+                    alpha = 160
                 }
+                canvas.nativeCanvas.drawCircle(cx, cy, radius * 0.95f, sweepPaint)
+            }
 
-                // Fallback for older Android versions (< 13)
-                // 1. Plasma Core
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            SecondaryCyan,
-                            PrimaryPurple,
-                            VioletAccent,
-                            Color(0xFFEC4899),
-                            GoldPrimary
-                        ),
-                        center = Offset(cx - radius * 0.2f, cy - radius * 0.2f),
-                        radius = radius
+            // 3. Bright Rim Light
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        GoldLight.copy(alpha = 0.3f),
+                        GoldPrimary.copy(alpha = 0.7f)
                     ),
                     center = Offset(cx, cy),
                     radius = radius
-                )
+                ),
+                center = Offset(cx, cy),
+                radius = radius
+            )
 
-                // 2. Rotating Gradient Overlay
-                val colors = intArrayOf(
-                    android.graphics.Color.parseColor("#7C3AED"),
-                    android.graphics.Color.parseColor("#06B6D4"),
-                    android.graphics.Color.parseColor("#EC4899"),
-                    android.graphics.Color.parseColor("#FFD700"),
-                    android.graphics.Color.parseColor("#7C3AED")
-                )
-                val sweepGrad = android.graphics.SweepGradient(cx, cy, colors, null)
-                val matrix = android.graphics.Matrix().apply {
-                    setRotate(timeAnim * 360f, cx, cy)
-                }
-                sweepGrad.setLocalMatrix(matrix)
-
-                drawIntoCanvas { canvas ->
-                    val sweepPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                        shader = sweepGrad
-                        alpha = 160
-                    }
-                    canvas.nativeCanvas.drawCircle(cx, cy, radius * 0.95f, sweepPaint)
-                }
-
-                // 3. Bright Rim Light
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            GoldLight.copy(alpha = 0.3f),
-                            GoldPrimary.copy(alpha = 0.7f)
-                        ),
-                        center = Offset(cx, cy),
-                        radius = radius
-                    ),
-                    center = Offset(cx, cy),
-                    radius = radius
-                )
-
-                // 4. Moving Specular Highlight Dot
-                val specX = cx - radius * 0.35f + cos(timeAnim * 2 * Math.PI.toFloat()) * radius * 0.15f
-                val specY = cy - radius * 0.35f + sin(timeAnim * 2 * Math.PI.toFloat()) * radius * 0.15f
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.9f),
-                            Color.White.copy(alpha = 0.3f),
-                            Color.Transparent
-                        ),
-                        center = Offset(specX, specY),
-                        radius = radius * 0.35f
+            // 4. Moving Specular Highlight Dot
+            val specX = cx - radius * 0.35f + cos(timeAnim * 2 * Math.PI.toFloat()) * radius * 0.15f
+            val specY = cy - radius * 0.35f + sin(timeAnim * 2 * Math.PI.toFloat()) * radius * 0.15f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.9f),
+                        Color.White.copy(alpha = 0.3f),
+                        Color.Transparent
                     ),
                     center = Offset(specX, specY),
                     radius = radius * 0.35f
-                )
-            }
+                ),
+                center = Offset(specX, specY),
+                radius = radius * 0.35f
+            )
         }
     }
 }

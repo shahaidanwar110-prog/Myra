@@ -1,5 +1,23 @@
 # Myra AI Assistant Implementation Status
 
+## Checkpoint D: Animated Character Video Centerpiece with Chroma Key & Media3 ExoPlayer
+- **Status**: Completed & Verified
+- **What Works**:
+  - Video Assets in App Assets: Moved `myra_idle.mp4` and `myra_talk.mp4` into `app/src/main/assets/`.
+  - Media3 ExoPlayer & Low Memory/Battery Optimization: Added Media3 ExoPlayer (`androidx.media3:media3-exoplayer:1.3.1`) dependencies, configured both players with `volume = 0f` (muted), `REPEAT_MODE_ONE` (seamless looping), and lifecycle-aware auto-pausing/resuming when the app is backgrounded.
+  - OpenGL ES 2.0 Chroma-Key Shader: Created `ChromaKeyTextureView` rendering ExoPlayer video on `TextureView` using OpenGL ES 2.0 fragment shader to remove solid green background (`G - max(R, B)` smoothstep thresholding) with anti-aliased soft edges and green spill suppression.
+  - Seamless Cross-Fade: Created `AnimatedCharacterCenterpiece` that cross-fades between `myra_idle.mp4` (when quiet) and `myra_talk.mp4` (while speaking) using Compose `animateFloatAsState` alpha compositing.
+  - Image Fallback: Automatically falls back to static girl image (`R.drawable.myra_logo`) if video assets fail to load or are missing.
+  - Settings Centerpiece Switch: Updated `SettingsScreen.kt` and `GlowingOrbCenterpiece.kt` to support choosing between "3D Glowing Orb", "Character Video", or "Both (Orb + Character)".
+- **Files Pushed**:
+  - `app/src/main/assets/myra_idle.mp4`
+  - `app/src/main/assets/myra_talk.mp4`
+  - `app/build.gradle.kts`
+  - `app/src/main/java/com/myra/ai/ui/components/AnimatedCharacterCenterpiece.kt`
+  - `app/src/main/java/com/myra/ai/ui/components/GlowingOrbCenterpiece.kt`
+  - `app/src/main/java/com/myra/ai/ui/screens/SettingsScreen.kt`
+  - `STATUS.md`
+
 ## Checkpoint C: 3D Glowing Orb Centerpiece, Flowing Edge Lighting, Settings & Accessibility Overlay
 - **Status**: Completed & Verified
 - **What Works**:
