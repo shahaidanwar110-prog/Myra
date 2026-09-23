@@ -147,10 +147,33 @@ class MainActivity : ComponentActivity() {
                         isSplashScreenActive = false
                     }
 
-                    // Speech recognition result handler
+                    // Gemini Live & Speech recognition handlers
                     LaunchedEffect(Unit) {
                         voiceController.onSpeechResultListener = { spokenText ->
                             processUserPrompt(spokenText)
+                        }
+
+                        voiceController.onGeminiLiveUserTranscript = { userText ->
+                            chatViewModel.addMessage(ChatMessage(sender = "User", text = userText))
+                            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("You: $userText")
+
+                            // Check phone control commands on live transcript without bypassing accessibility/phone control!
+                            val localAction = com.myra.ai.ai.CommandParser.parseCommand(userText)
+                            if (localAction != null) {
+                                chatViewModel.sendMessage(userText) { action, callback ->
+                                    showConfirmationDialogForAction(action, callback)
+                                }
+                            }
+                        }
+
+                        voiceController.onGeminiLiveModelTranscript = { modelText ->
+                            chatViewModel.addMessage(ChatMessage(sender = "Myra", text = modelText, providerInfo = "Gemini Live"))
+                            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra: $modelText")
+                        }
+
+                        voiceController.onGeminiLiveError = { err ->
+                            chatViewModel.addMessage(ChatMessage(sender = "Myra", text = "Gemini Live Error: $err. Falling back to turn-based voice pipeline.", isError = true))
+                            com.myra.ai.accessibility.AssistantOverlayManager.appendChatMessage("Myra Error: $err")
                         }
                     }
 
@@ -383,11 +406,18 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (trimmedPrompt.contains("live conversation", ignoreCase = true) || trimmedPrompt.contains("live mode", ignoreCase = true)) {
-            voiceController.setLiveMode(true)
-            val liveMsg = "Live conversation mode activated. I'm listening! Speak after I answer, or say 'stop' anytime."
-            chatViewModel.addMessage(ChatMessage("Myra", liveMsg))
-            voiceController.speak(liveMsg)
+        if (trimmedPrompt.contains("live conversation", ignoreCase = true) || trimmedPrompt.contains("live mode", ignoreCase = true) || trimmedPrompt.equals("toggle live mode", ignoreCase = true)) {
+            if (voiceController.isGeminiLiveActive.value) {
+                voiceController.stopGeminiLiveSession()
+                com.myra.ai.accessibility.OverlayForegroundService.stop(this)
+                val stopMsg = "Gemini Live session ended."
+                chatViewModel.addMessage(ChatMessage("Myra", stopMsg))
+            } else {
+                com.myra.ai.accessibility.OverlayForegroundService.start(this)
+                voiceController.startGeminiLiveSession(lifecycleScope)
+                val liveMsg = "Gemini Live session starting... Speak naturally without pressing mic."
+                chatViewModel.addMessage(ChatMessage("Myra", liveMsg, providerInfo = "Gemini Live"))
+            }
             return
         }
 
@@ -748,6 +778,7 @@ class MainActivity : ComponentActivity() {
         MyraAccessibilityService.getInstance()?.clearGuideHighlight()
         com.myra.ai.accessibility.OverlayForegroundService.stop(this)
         taskNotificationManager.clearNotification()
+        voiceController.stopGeminiLiveSession()
         voiceController.setLiveMode(false)
         voiceController.stopListening()
         if (::agentOrchestrator.isInitialized) {
