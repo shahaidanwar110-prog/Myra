@@ -496,70 +496,109 @@ fun HomeTabContent(
             label = "micGlowAlpha"
         )
 
-        Box(
+        // Gemini Live Toggle & Standard Mic Button Controls
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Pulse outer glow halo behind mic button
-            Box(
-                modifier = Modifier
-                    .scale(micPulseScale)
-                    .size(88.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = if (isListening) listOf(
-                                ErrorRed.copy(alpha = micGlowAlpha),
-                                PrimaryPurple.copy(alpha = micGlowAlpha * 0.5f),
-                                Color.Transparent
-                            ) else listOf(
-                                GoldPrimary.copy(alpha = micGlowAlpha),
-                                PrimaryPurple.copy(alpha = micGlowAlpha * 0.4f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
-            val micGradient = if (isListening) {
-                listOf(Color(0xFFEF4444), Color(0xFFB91C1C))
-            } else {
-                listOf(GoldPrimary, PrimaryPurple)
-            }
-
-            IconButton(
+            // Gemini Live Conversation Toggle Button
+            OutlinedButton(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    if (isListening) onStopListening() else onStartListening()
+                    onSendMessage("toggle live mode")
                 },
-                modifier = Modifier
-                    .size(74.dp)
-                    .shadow(10.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(micGradient))
-                    .border(1.5.dp, GoldLight.copy(alpha = 0.6f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                    contentDescription = "Voice Command",
-                    tint = Color.White,
-                    modifier = Modifier.size(36.dp)
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (isListening) PrimaryPurple.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.5.dp,
+                    if (isListening) SecondaryCyan else GoldPrimary
                 )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.Stop else Icons.Default.GraphicEq,
+                        contentDescription = "Gemini Live",
+                        tint = if (isListening) SecondaryCyan else GoldPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = if (isListening) "End Live" else "Gemini Live",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isListening) SecondaryCyan else GoldPrimary
+                    )
+                }
+            }
+
+            Box(
+                contentAlignment = Alignment.Center
+            ) {
+                // Pulse outer glow halo behind mic button
+                Box(
+                    modifier = Modifier
+                        .scale(micPulseScale)
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = if (isListening) listOf(
+                                    ErrorRed.copy(alpha = micGlowAlpha),
+                                    PrimaryPurple.copy(alpha = micGlowAlpha * 0.5f),
+                                    Color.Transparent
+                                ) else listOf(
+                                    GoldPrimary.copy(alpha = micGlowAlpha),
+                                    PrimaryPurple.copy(alpha = micGlowAlpha * 0.4f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+
+                val micGradient = if (isListening) {
+                    listOf(Color(0xFFEF4444), Color(0xFFB91C1C))
+                } else {
+                    listOf(GoldPrimary, PrimaryPurple)
+                }
+
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (isListening) onStopListening() else onStartListening()
+                    },
+                    modifier = Modifier
+                        .size(68.dp)
+                        .shadow(10.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(micGradient))
+                        .border(1.5.dp, GoldLight.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = "Voice Command",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
 
         if (isListening) {
             Text(
-                "Listening... (English, Urdu, Hindi)",
+                "Listening continuous voice stream...",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         } else if (isSpeaking) {
             Text(
-                "Myra is speaking...",
+                "Myra is speaking (Mic muted for echo prevention)...",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.align(Alignment.CenterHorizontally)

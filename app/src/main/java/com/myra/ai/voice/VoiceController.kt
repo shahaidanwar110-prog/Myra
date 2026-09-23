@@ -56,7 +56,7 @@ class VoiceController(
     val isSpeaking: StateFlow<Boolean> = _isSpeaking
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    var isLiveMode: Boolean = true
+    var isLiveMode: Boolean = false
         private set
 
     private var silenceRunnable: Runnable? = null
@@ -64,12 +64,119 @@ class VoiceController(
 
     var onSpeechResultListener: ((String) -> Unit)? = null
 
+    // Gemini Live Session Management
+    private var geminiLiveClient: com.myra.ai.ai.GeminiLiveClient? = null
+    private var liveAudioEngine: LiveAudioEngine? = null
+
+    private val _isGeminiLiveActive = MutableStateFlow(false)
+    val isGeminiLiveActive: StateFlow<Boolean> = _isGeminiLiveActive
+
+    var onGeminiLiveUserTranscript: ((String) -> Unit)? = null
+    var onGeminiLiveModelTranscript: ((String) -> Unit)? = null
+    var onGeminiLiveError: ((String) -> Unit)? = null
+
+    fun startGeminiLiveSession(scope: CoroutineScope) {
+        val apiKey = secureStorage.getApiKey(SecureStorage.PROVIDER_GEMINI)
+        if (apiKey.isBlank()) {
+            val err = "Gemini API key is missing in Settings. Cannot start Gemini Live session."
+            com.myra.ai.util.DiagnosticsHelper.lastError = err
+            onGeminiLiveError?.invoke(err)
+            return
+        }
+
+        stopGeminiLiveSession()
+        stopListening()
+        stopSpeaking()
+
+        val audioEngine = LiveAudioEngine(context, scope)
+        liveAudioEngine = audioEngine
+
+        val systemPrompt = com.myra.ai.ai.PersonalityPromptBuilder.buildSystemPrompt(secureStorage)
+
+        val liveClient = com.myra.ai.ai.GeminiLiveClient(
+            apiKey = apiKey,
+            modelName = "gemini-2.0-flash-exp",
+            systemInstructionText = systemPrompt,
+            listener = object : com.myra.ai.ai.GeminiLiveClient.LiveClientListener {
+                override fun onSessionStarted() {
+                    _isGeminiLiveActive.value = true
+                    resetSilenceTimer()
+                    audioEngine.startRecording()
+                }
+
+                override fun onAudioDataReceived(pcmData: ByteArray) {
+                    audioEngine.playPcmChunk(pcmData)
+                }
+
+                override fun onInputTranscription(text: String) {
+                    resetSilenceTimer()
+                    onGeminiLiveUserTranscript?.invoke(text)
+                }
+
+                override fun onOutputTranscription(text: String) {
+                    resetSilenceTimer()
+                    onGeminiLiveModelTranscript?.invoke(text)
+                }
+
+                override fun onInterrupted() {
+                    audioEngine.clearPlaybackQueue()
+                }
+
+                override fun onError(error: String) {
+                    com.myra.ai.util.DiagnosticsHelper.lastError = "Gemini Live Error: $error"
+                    com.myra.ai.util.EventLogger.logEvent(
+                        eventType = "GEMINI_LIVE_ERROR",
+                        tag = "GeminiLive",
+                        message = error,
+                        status = "ERROR"
+                    )
+                    stopGeminiLiveSession()
+                    onGeminiLiveError?.invoke(error)
+                }
+
+                override fun onSessionClosed(reason: String) {
+                    _isGeminiLiveActive.value = false
+                    audioEngine.stopAll()
+                }
+            }
+        )
+
+        geminiLiveClient = liveClient
+
+        audioEngine.onAudioChunkCaptured = { pcmChunk ->
+            liveClient.sendAudioChunk(pcmChunk)
+        }
+
+        // Sync playback state with isSpeaking flow
+        scope.launch {
+            audioEngine.isPlaying.collect { playing ->
+                _isSpeaking.value = playing
+                audioEngine.isMuted = playing
+                _isListening.value = audioEngine.isRecording.value && !playing
+            }
+        }
+
+        liveClient.connect()
+    }
+
+    fun stopGeminiLiveSession() {
+        _isGeminiLiveActive.value = false
+        geminiLiveClient?.disconnect()
+        geminiLiveClient = null
+        liveAudioEngine?.stopAll()
+        liveAudioEngine = null
+        _isListening.value = false
+        _isSpeaking.value = false
+        cancelSilenceTimer()
+    }
+
     fun setLiveMode(enabled: Boolean) {
         isLiveMode = enabled
         if (enabled) {
             resetSilenceTimer()
         } else {
             cancelSilenceTimer()
+            stopGeminiLiveSession()
             stopListening()
             stopSpeaking()
         }
@@ -574,6 +681,7 @@ class VoiceController(
     }
 
     fun destroy() {
+        stopGeminiLiveSession()
         speechRecognizer?.destroy()
         speechRecognizer = null
         textToSpeech?.stop()
