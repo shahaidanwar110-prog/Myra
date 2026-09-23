@@ -238,16 +238,18 @@ class ChatViewModel(
         val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
         val failureReason = if (isSuccess) null else execResult.exceptionOrNull()?.localizedMessage
 
-        appDatabase?.taskDao()?.insertStepLog(
-            com.myra.ai.data.db.TaskStepEntity(
-                stepIndex = 1,
-                action = action.type.name,
-                target = targetStr,
-                status = if (isSuccess) "SUCCESS" else "FAILED",
-                resultMessage = resultMsg,
-                failureReason = failureReason
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            appDatabase?.taskDao()?.insertStepLog(
+                com.myra.ai.data.db.TaskStepEntity(
+                    stepIndex = 1,
+                    action = action.type.name,
+                    target = targetStr,
+                    status = if (isSuccess) "SUCCESS" else "FAILED",
+                    resultMessage = resultMsg,
+                    failureReason = failureReason
+                )
             )
-        )
+        }
 
         execResult.fold(
             onSuccess = { resultMessage ->
@@ -303,16 +305,18 @@ class ChatViewModel(
             val resultMsg = execResult.getOrElse { it.localizedMessage ?: "Failed" }
             val failureReason = if (isSuccess) null else execResult.exceptionOrNull()?.localizedMessage
 
-            appDatabase?.taskDao()?.insertStepLog(
-                com.myra.ai.data.db.TaskStepEntity(
-                    stepIndex = stepNum,
-                    action = step.type.name,
-                    target = targetStr,
-                    status = if (isSuccess) "SUCCESS" else "FAILED",
-                    resultMessage = resultMsg,
-                    failureReason = failureReason
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                appDatabase?.taskDao()?.insertStepLog(
+                    com.myra.ai.data.db.TaskStepEntity(
+                        stepIndex = stepNum,
+                        action = step.type.name,
+                        target = targetStr,
+                        status = if (isSuccess) "SUCCESS" else "FAILED",
+                        resultMessage = resultMsg,
+                        failureReason = failureReason
+                    )
                 )
-            )
+            }
 
             if (!isSuccess) {
                 val failReport = "Multi-step task stopped at step $stepNum of $total (${step.type.name}). Failure reason: ${failureReason ?: "Unknown error"}"

@@ -348,15 +348,21 @@ class VoiceController(
         applyTtsSettings()
 
         val normalized = normalizeTextForSpeech(text)
-        val chunks = normalized.split(Regex("(?<=[.!?\\n])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
-        if (chunks.isEmpty()) return
+        // Split text by full sentence boundaries (. ! ? \n or Urdu/Hindi full stops like ۔)
+        val sentences = normalized.split(Regex("(?<=[.!?۔\\n])\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        if (sentences.isEmpty()) return
 
         val baseId = "myra_tts_${System.currentTimeMillis()}"
         var lastId = ""
-        for ((index, chunk) in chunks.withIndex()) {
+        for ((index, sentence) in sentences.withIndex()) {
             val id = "${baseId}_$index"
             lastId = id
-            textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, id)
+            // First sentence flushes previous speech; subsequent full sentences queue smoothly
+            val queueMode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            textToSpeech?.speak(sentence, queueMode, null, id)
         }
         activeLastUtteranceId = lastId
         _isSpeaking.value = true

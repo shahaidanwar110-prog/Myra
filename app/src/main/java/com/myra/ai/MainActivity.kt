@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        window.decorView.isSoundEffectsEnabled = false
+
         secureStorage = SecureStorage(this)
         voiceController = VoiceController(this, secureStorage)
         aiProviderManager = AiProviderManager(secureStorage)
